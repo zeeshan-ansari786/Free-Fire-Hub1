@@ -1,0 +1,36 @@
+1. Core Features (The Basics):
+
+    User Authentication: Secure registration and login. Users MUST provide their Free Fire UID, In-Game Name (IGN), and WhatsApp number during signup.
+
+    Tournament Management: An admin dashboard to create tournaments with:
+
+        Title, Prize Pool, Entry Fee, and Start Date/Time.
+
+        Maximum slots (e.g., 48 players or 12 squads).
+
+        Tournament Status: "Upcoming," "Ongoing," and "Completed."
+
+    Registration & Payments: A "Join" button on tournaments. If it's a paid match, integrate a payment gateway (Razorpay for India). Users must be able to upload a payment screenshot for manual admin verification or use automated UPI webhooks.
+
+    Room Details: A secure area visible only to joined players where the Admin can post the "Room ID and Password" 15 minutes before the start time.
+
+2. Advanced Requirements (The "Fantastic" Details):
+
+    Automated Leaderboard: Create a points system (e.g., 12pts for Booyah, 1pt per kill). Allow the admin to upload a CSV or fill a simple table to update rankings instantly.
+
+    Player Profiles: Each user gets a profile showing their "Matches Played," "Total Earnings," and "Global Rank" on the platform.
+
+    Anti-Cheat & Verification: Add a "Report Player" button and a system to check if a player's UID matches their registered profile.
+
+    Live Notifications: Use a notification toast or a "Live Updates" ticker to announce winners and new tournaments.
+
+3. Technical Stack & Performance:
+
+    Frontend: React with Tailwind CSS for a dark-themed, "gaming" aesthetic (Neon accents, sharp edges).
+
+    Backend/Database: Use Supabase or Firebase for real-time data and lightning-fast performance.
+
+    Optimization: Ensure the site loads in under 2 seconds. Use image lazy loading and clean, modular code for easy maintenance.
+
+4. Design Instructions:
+Make the website look like a professional esports app (similar to Liquidpedia or Winzo). Use a "Dark Mode" default with vibrant colors like Cyberpunk Green or Electric Blue for buttons.

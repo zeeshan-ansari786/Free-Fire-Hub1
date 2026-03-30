@@ -1,22 +1,36 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Free Fire Tournament Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: tournaments
+    description: Tournament management
+  - name: registrations
+    description: Tournament registrations
+  - name: leaderboard
+    description: Leaderboard and rankings
+  - name: players
+    description: Player profiles and stats
+  - name: notifications
+    description: Live notifications
+  - name: reports
+    description: Player reports
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +38,499 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments:
+    get:
+      operationId: getTournaments
+      tags: [tournaments]
+      summary: List all tournaments
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [upcoming, ongoing, completed]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: List of tournaments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentListResponse"
+    post:
+      operationId: createTournament
+      tags: [tournaments]
+      summary: Create a tournament (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTournamentRequest"
+      responses:
+        "201":
+          description: Tournament created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}:
+    get:
+      operationId: getTournament
+      tags: [tournaments]
+      summary: Get tournament by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tournament details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateTournament
+      tags: [tournaments]
+      summary: Update tournament (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTournamentRequest"
+      responses:
+        "200":
+          description: Tournament updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+
+  /tournaments/{id}/room:
+    post:
+      operationId: postRoomDetails
+      tags: [tournaments]
+      summary: Post room ID and password (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoomDetailsRequest"
+      responses:
+        "200":
+          description: Room details posted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+
+  /tournaments/{id}/register:
+    post:
+      operationId: registerForTournament
+      tags: [registrations]
+      summary: Register for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TournamentRegistrationRequest"
+      responses:
+        "201":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registration"
+        "400":
+          description: Validation error or tournament full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}/registrations:
+    get:
+      operationId: getTournamentRegistrations
+      tags: [registrations]
+      summary: Get registrations for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of registrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Registration"
+
+  /registrations/{id}/verify:
+    patch:
+      operationId: verifyRegistration
+      tags: [registrations]
+      summary: Verify/reject a registration (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRegistrationRequest"
+      responses:
+        "200":
+          description: Registration updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registration"
+
+  /tournaments/{id}/leaderboard:
+    get:
+      operationId: getTournamentLeaderboard
+      tags: [leaderboard]
+      summary: Get leaderboard for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+    post:
+      operationId: updateLeaderboard
+      tags: [leaderboard]
+      summary: Update leaderboard (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLeaderboardRequest"
+      responses:
+        "200":
+          description: Leaderboard updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+
+  /players/{userId}:
+    get:
+      operationId: getPlayerProfile
+      tags: [players]
+      summary: Get player profile
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Player profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerProfile"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /leaderboard/global:
+    get:
+      operationId: getGlobalLeaderboard
+      tags: [leaderboard]
+      summary: Get global player rankings
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Global leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GlobalLeaderboardResponse"
+
+  /notifications:
+    get:
+      operationId: getNotifications
+      tags: [notifications]
+      summary: Get recent notifications
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+    post:
+      operationId: createNotification
+      tags: [notifications]
+      summary: Create a notification (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNotificationRequest"
+      responses:
+        "201":
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /reports:
+    post:
+      operationId: reportPlayer
+      tags: [reports]
+      summary: Report a player
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportPlayerRequest"
+      responses:
+        "201":
+          description: Report submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+    get:
+      operationId: getReports
+      tags: [reports]
+      summary: Get all reports (admin only)
+      responses:
+        "200":
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Report"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get admin dashboard stats
+      responses:
+        "200":
+          description: Admin stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/pending-registrations:
+    get:
+      operationId: getPendingRegistrations
+      tags: [admin]
+      summary: Get all pending payment registrations
+      responses:
+        "200":
+          description: Pending registrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Registration"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +538,463 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        freeFireUid:
+          type: string
+        inGameName:
+          type: string
+        whatsappNumber:
+          type: string
+      required: [username, email, password, freeFireUid, inGameName, whatsappNumber]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        message:
+          type: string
+      required: [user]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        freeFireUid:
+          type: string
+        inGameName:
+          type: string
+        whatsappNumber:
+          type: string
+        isAdmin:
+          type: boolean
+        totalEarnings:
+          type: integer
+        globalRank:
+          type: integer
+        matchesPlayed:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, username, email, freeFireUid, inGameName, whatsappNumber, isAdmin, totalEarnings, globalRank, matchesPlayed, createdAt]
+
+    Tournament:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        prizePool:
+          type: integer
+        entryFee:
+          type: integer
+        startDateTime:
+          type: string
+          format: date-time
+        maxSlots:
+          type: integer
+        filledSlots:
+          type: integer
+        status:
+          type: string
+          enum: [upcoming, ongoing, completed]
+        roomId:
+          type: string
+          nullable: true
+        roomPassword:
+          type: string
+          nullable: true
+        mapName:
+          type: string
+        gameMode:
+          type: string
+          enum: [solo, duo, squad]
+        bannerUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, prizePool, entryFee, startDateTime, maxSlots, filledSlots, status, mapName, gameMode, createdAt]
+
+    TournamentDetail:
+      allOf:
+        - $ref: "#/components/schemas/Tournament"
+        - type: object
+          properties:
+            isRegistered:
+              type: boolean
+            registrationStatus:
+              type: string
+              nullable: true
+          required: [isRegistered]
+
+    TournamentListResponse:
+      type: object
+      properties:
+        tournaments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tournament"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [tournaments, total, page, limit]
+
+    CreateTournamentRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        prizePool:
+          type: integer
+          minimum: 0
+        entryFee:
+          type: integer
+          minimum: 0
+        startDateTime:
+          type: string
+          format: date-time
+        maxSlots:
+          type: integer
+          minimum: 2
+        mapName:
+          type: string
+        gameMode:
+          type: string
+          enum: [solo, duo, squad]
+        bannerUrl:
+          type: string
+      required: [title, prizePool, entryFee, startDateTime, maxSlots, mapName, gameMode]
+
+    UpdateTournamentRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        prizePool:
+          type: integer
+        entryFee:
+          type: integer
+        startDateTime:
+          type: string
+          format: date-time
+        maxSlots:
+          type: integer
+        status:
+          type: string
+          enum: [upcoming, ongoing, completed]
+        mapName:
+          type: string
+        gameMode:
+          type: string
+          enum: [solo, duo, squad]
+        bannerUrl:
+          type: string
+
+    RoomDetailsRequest:
+      type: object
+      properties:
+        roomId:
+          type: string
+        roomPassword:
+          type: string
+      required: [roomId, roomPassword]
+
+    TournamentRegistrationRequest:
+      type: object
+      properties:
+        paymentScreenshotUrl:
+          type: string
+          nullable: true
+        transactionId:
+          type: string
+          nullable: true
+      required: []
+
+    Registration:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        userId:
+          type: integer
+        paymentStatus:
+          type: string
+          enum: [pending, verified, rejected, free]
+        paymentScreenshotUrl:
+          type: string
+          nullable: true
+        transactionId:
+          type: string
+          nullable: true
+        registeredAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+        tournament:
+          $ref: "#/components/schemas/Tournament"
+      required: [id, tournamentId, userId, paymentStatus, registeredAt, user, tournament]
+
+    VerifyRegistrationRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [verified, rejected]
+        adminNote:
+          type: string
+      required: [status]
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        userId:
+          type: integer
+        rank:
+          type: integer
+        kills:
+          type: integer
+        placement:
+          type: integer
+        totalPoints:
+          type: integer
+        prize:
+          type: integer
+        user:
+          $ref: "#/components/schemas/User"
+      required: [id, tournamentId, userId, rank, kills, placement, totalPoints, prize, user]
+
+    UpdateLeaderboardRequest:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: integer
+              kills:
+                type: integer
+              placement:
+                type: integer
+              prize:
+                type: integer
+            required: [userId, kills, placement]
+      required: [entries]
+
+    PlayerProfile:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        matchesPlayed:
+          type: integer
+        totalKills:
+          type: integer
+        totalEarnings:
+          type: integer
+        globalRank:
+          type: integer
+        recentTournaments:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        winRate:
+          type: number
+      required: [user, matchesPlayed, totalKills, totalEarnings, globalRank, recentTournaments, winRate]
+
+    GlobalLeaderboardResponse:
+      type: object
+      properties:
+        players:
+          type: array
+          items:
+            $ref: "#/components/schemas/GlobalPlayerRank"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [players, total, page, limit]
+
+    GlobalPlayerRank:
+      type: object
+      properties:
+        rank:
+          type: integer
+        user:
+          $ref: "#/components/schemas/User"
+        totalPoints:
+          type: integer
+        totalKills:
+          type: integer
+        matchesPlayed:
+          type: integer
+        totalEarnings:
+          type: integer
+      required: [rank, user, totalPoints, totalKills, matchesPlayed, totalEarnings]
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [tournament_created, winner_announced, new_registration, room_posted, system]
+        title:
+          type: string
+        message:
+          type: string
+        tournamentId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, type, title, message, createdAt]
+
+    CreateNotificationRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [tournament_created, winner_announced, new_registration, room_posted, system]
+        title:
+          type: string
+        message:
+          type: string
+        tournamentId:
+          type: integer
+          nullable: true
+      required: [type, title, message]
+
+    ReportPlayerRequest:
+      type: object
+      properties:
+        reportedUserId:
+          type: integer
+        tournamentId:
+          type: integer
+        reason:
+          type: string
+          enum: [cheating, abuse, uid_mismatch, other]
+        description:
+          type: string
+      required: [reportedUserId, tournamentId, reason, description]
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: integer
+        reporterUserId:
+          type: integer
+        reportedUserId:
+          type: integer
+        tournamentId:
+          type: integer
+        reason:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, reviewed, dismissed]
+        createdAt:
+          type: string
+          format: date-time
+        reporter:
+          $ref: "#/components/schemas/User"
+        reported:
+          $ref: "#/components/schemas/User"
+      required: [id, reporterUserId, reportedUserId, tournamentId, reason, description, status, createdAt, reporter, reported]
+
+    AdminStats:
+      type: object
+      properties:
+        totalPlayers:
+          type: integer
+        totalTournaments:
+          type: integer
+        activeTournaments:
+          type: integer
+        totalPrizeDistributed:
+          type: integer
+        pendingPayments:
+          type: integer
+        pendingReports:
+          type: integer
+        recentRegistrations:
+          type: integer
+        upcomingTournaments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tournament"
+      required: [totalPlayers, totalTournaments, activeTournaments, totalPrizeDistributed, pendingPayments, pendingReports, recentRegistrations, upcomingTournaments]
