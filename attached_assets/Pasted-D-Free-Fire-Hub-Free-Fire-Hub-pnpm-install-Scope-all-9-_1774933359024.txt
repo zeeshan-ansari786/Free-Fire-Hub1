@@ -1,0 +1,43 @@
+D:\Free-Fire-Hub\Free-Fire-Hub>pnpm install
+Scope: all 9 workspace projects
+Downloading react-icons@5.6.0: 22.42 MB/22.42 MB, done
+Packages: +494
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 500, reused 0, downloaded 494, added 494, done
+node_modules/.pnpm/esbuild@0.27.3/node_modules/esbuild: Running postinstall script, done in 3s
+
+devDependencies:
++ prettier 3.8.1
++ typescript 5.9.3 (6.0.2 is available)
+
+Done in 44.2s using pnpm v10.33.0
+
+D:\Free-Fire-Hub\Free-Fire-Hub>set PORT=3000
+
+D:\Free-Fire-Hub\Free-Fire-Hub>set BASE_PATH=/pnpm --filter @workspace/freefire-tournament run dev
+
+D:\Free-Fire-Hub\Free-Fire-Hub>set BASE_PATH=/
+
+D:\Free-Fire-Hub\Free-Fire-Hub>pnpm --filter @workspace/freefire-tournament run dev
+
+> @workspace/freefire-tournament@0.0.0 dev D:\Free-Fire-Hub\Free-Fire-Hub\artifacts\freefire-tournament
+> vite --config vite.config.ts --host 0.0.0.0
+
+failed to load config from D:\Free-Fire-Hub\Free-Fire-Hub\artifacts\freefire-tournament\vite.config.ts
+error when starting dev server:
+Error: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+    at Object.<anonymous> (D:\Free-Fire-Hub\Free-Fire-Hub\node_modules\.pnpm\@tailwindcss+oxide@4.2.1\node_modules\@tailwindcss\oxide\index.js:559:11)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)
+    at Object..js (node:internal/modules/cjs/loader:1943:10)
+    at Module.load (node:internal/modules/cjs/loader:1533:32)
+    at Module._load (node:internal/modules/cjs/loader:1335:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:328:3)
+    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:233:7)
+    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)
+D:\Free-Fire-Hub\Free-Fire-Hub\artifacts\freefire-tournament:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/freefire-tournament@0.0.0 dev: `vite --config vite.config.ts --host 0.0.0.0`
+Exit status 1
+
+D:\Free-Fire-Hub\Free-Fire-Hub>
