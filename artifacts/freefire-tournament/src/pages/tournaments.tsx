@@ -63,7 +63,7 @@ export default function Tournaments() {
             <div key={i} className="h-48 rounded-xl bg-card border border-border animate-pulse" />
           ))}
         </div>
-      ) : data?.tournaments.length === 0 ? (
+      ) : !data?.tournaments?.length ? (
         <Card className="border-dashed border-primary/30 bg-card/30">
           <CardContent className="flex flex-col items-center justify-center py-20 text-center">
             <Swords className="h-16 w-16 text-muted-foreground mb-4 opacity-30" />

@@ -79,7 +79,7 @@ export default function Home() {
               <div key={i} className="h-64 rounded-xl bg-card border border-border animate-pulse" />
             ))}
           </div>
-        ) : tournamentsData?.tournaments.length === 0 ? (
+        ) : !tournamentsData?.tournaments?.length ? (
           <Card className="border-dashed border-primary/30 bg-card/30">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Trophy className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
@@ -169,7 +169,7 @@ export default function Home() {
               <div key={i} className="h-32 rounded-xl bg-card border border-border animate-pulse" />
             ))}
           </div>
-        ) : leaderboardData?.players.length === 0 ? (
+        ) : !leaderboardData?.players?.length ? (
           <Card className="border-dashed border-secondary/30 bg-card/30">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Medal className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />

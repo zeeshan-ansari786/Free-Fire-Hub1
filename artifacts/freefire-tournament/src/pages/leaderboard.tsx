@@ -34,7 +34,7 @@ export default function Leaderboard() {
                 <div key={i} className="h-12 w-full bg-border/20 rounded animate-pulse" />
               ))}
             </div>
-          ) : data?.players.length === 0 ? (
+          ) : !data?.players?.length ? (
             <div className="p-12 text-center text-muted-foreground font-mono uppercase tracking-widest">
               Leaderboard is currently empty.
             </div>
