@@ -5,3 +5,4 @@ export * from "./transactions";
 export * from "./leaderboard";
 export * from "./notifications";
 export * from "./reports";
+export * from "./admin-config";

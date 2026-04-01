@@ -81,7 +81,7 @@ router.post("/admin/users/:id/ban", requireAdmin, async (req, res): Promise<void
 
 // Financial overview - deposits, withdrawals
 router.get("/admin/financial", requireAdmin, async (req, res): Promise<void> => {
-  const [deposits, withdrawals, pendingWithdrawals] = await Promise.all([
+  const [deposits, withdrawals, pendingWithdrawals, pendingDeposits] = await Promise.all([
     db.select({
       total: sql<number>`coalesce(sum(amount), 0)`,
       count: sql<number>`count(*)`,
@@ -89,27 +89,37 @@ router.get("/admin/financial", requireAdmin, async (req, res): Promise<void> => 
     db.select({
       total: sql<number>`coalesce(sum(amount), 0)`,
       count: sql<number>`count(*)`,
-    }).from(transactionsTable).where(eq(transactionsTable.type, "withdrawal")),
+    }).from(transactionsTable).where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed"))),
     db.select().from(transactionsTable)
       .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")))
       .orderBy(desc(transactionsTable.createdAt)),
+    db.select().from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "pending")))
+      .orderBy(desc(transactionsTable.createdAt)),
   ]);
 
-  const pendingWithWithUsers = await Promise.all(pendingWithdrawals.map(async (t) => {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, t.userId));
-    return { ...t, user: user ? formatUser(user) : null };
-  }));
+  const [pendingWithUsers, pendingDepUsers] = await Promise.all([
+    Promise.all(pendingWithdrawals.map(async (t) => {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, t.userId));
+      return { ...t, user: user ? formatUser(user) : null };
+    })),
+    Promise.all(pendingDeposits.map(async (t) => {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, t.userId));
+      return { ...t, user: user ? formatUser(user) : null };
+    })),
+  ]);
 
   res.json({
     totalDeposits: Number(deposits[0].total),
     depositCount: Number(deposits[0].count),
     totalWithdrawals: Number(withdrawals[0].total),
     withdrawalCount: Number(withdrawals[0].count),
-    pendingWithdrawals: pendingWithWithUsers,
+    pendingWithdrawals: pendingWithUsers,
+    pendingDeposits: pendingDepUsers,
   });
 });
 
-// Approve or reject withdrawal
+// Approve or reject a deposit or withdrawal
 router.post("/admin/financial/:id/approve", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { action } = req.body; // "approve" | "reject"
@@ -120,18 +130,27 @@ router.post("/admin/financial/:id/approve", requireAdmin, async (req, res): Prom
 
   if (action === "approve") {
     await db.update(transactionsTable).set({ status: "completed" }).where(eq(transactionsTable.id, id));
-  } else if (action === "reject") {
-    // Refund the amount back to wallet
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, txn.userId));
-    if (user) {
-      await db.update(usersTable).set({ walletBalance: user.walletBalance + txn.amount }).where(eq(usersTable.id, txn.userId));
+    // For deposits: credit wallet when approved
+    if (txn.type === "deposit") {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, txn.userId));
+      if (user) {
+        await db.update(usersTable).set({ walletBalance: user.walletBalance + txn.amount }).where(eq(usersTable.id, txn.userId));
+      }
     }
+  } else if (action === "reject") {
     await db.update(transactionsTable).set({ status: "rejected" }).where(eq(transactionsTable.id, id));
+    // For withdrawals: refund balance back
+    if (txn.type === "withdrawal") {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, txn.userId));
+      if (user) {
+        await db.update(usersTable).set({ walletBalance: user.walletBalance + txn.amount }).where(eq(usersTable.id, txn.userId));
+      }
+    }
   } else {
     res.status(400).json({ error: "Action must be 'approve' or 'reject'" }); return;
   }
 
-  res.json({ message: `Withdrawal ${action}d` });
+  res.json({ message: `${txn.type === "deposit" ? "Deposit" : "Withdrawal"} ${action}d` });
 });
 
 // Get registrations for a tournament (room management)

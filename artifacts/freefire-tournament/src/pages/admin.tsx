@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { 
   useGetAdminStats, getGetAdminStatsQueryKey,
@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, UserX, Eye } from "lucide-react";
+import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2 } from "lucide-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
 
@@ -45,11 +45,42 @@ type PlayerReg = {
   user: UserEntry | null;
 };
 
+type PendingTxn = { id: number; userId: number; amount: number; description: string; createdAt: string; user: UserEntry | null };
 type FinancialData = {
   totalDeposits: number; depositCount: number; totalWithdrawals: number; withdrawalCount: number;
-  pendingWithdrawals: Array<{ id: number; userId: number; amount: number; description: string; createdAt: string; user: UserEntry | null }>;
+  pendingWithdrawals: PendingTxn[]; pendingDeposits: PendingTxn[];
 };
+type AdminPaymentConfig = { upiId: string; upiName: string; qrCodeUrl: string | null };
 
+function useAdminConfig(enabled = true) {
+  return useQuery({ queryKey: ["admin-config"], queryFn: () => customFetch<AdminPaymentConfig>("/api/admin/config", { method: "GET" }), enabled });
+}
+function useUpdateAdminConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { upiId?: string; upiName?: string }) =>
+      customFetch<{ message: string }>("/api/admin/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-config"] }); qc.invalidateQueries({ queryKey: ["payment-config"] }); },
+  });
+}
+function useUploadQrCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData(); fd.append("qrCode", file);
+      return customFetch<{ qrCodeUrl: string; message: string }>("/api/admin/config/qr-code", { method: "POST", body: fd });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-config"] }); qc.invalidateQueries({ queryKey: ["payment-config"] }); },
+  });
+}
+function useUploadBannerImage() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData(); fd.append("image", file);
+      return customFetch<{ url: string; message: string }>("/api/admin/upload/image", { method: "POST", body: fd });
+    },
+  });
+}
 function useAdminUsers(enabled = true) {
   return useQuery({ queryKey: ["admin-users"], queryFn: () => customFetch<UserEntry[]>("/api/admin/users", { method: "GET" }), enabled });
 }
@@ -126,6 +157,13 @@ export default function Admin() {
   const [editForm, setEditForm] = useState({ title: "", description: "", startDateTime: "", mapName: "", gameMode: "", maxSlots: "", status: "", bannerUrl: "" });
   const [roomForm, setRoomForm] = useState({ roomId: "", roomPassword: "" });
   const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
+  const [upiForm, setUpiForm] = useState({ upiId: "", upiName: "" });
+  const [qrPreview, setQrPreview] = useState<string | null>(null);
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const qrInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const { data: stats } = useGetAdminStats({ query: { enabled: !!user?.isAdmin, queryKey: getGetAdminStatsQueryKey() } });
   const { data: pendingRegs } = useGetPendingRegistrations({ query: { enabled: !!user?.isAdmin, queryKey: getGetPendingRegistrationsQueryKey() } });
@@ -133,6 +171,7 @@ export default function Admin() {
   const { data: adminUsers, isLoading: usersLoading } = useAdminUsers(!!user?.isAdmin);
   const { data: financial, isLoading: financialLoading } = useAdminFinancial(!!user?.isAdmin);
   const { data: tournamentPlayers, isLoading: playersLoading } = useTournamentPlayers(playersTournament?.id ?? null);
+  const { data: adminConfig, isLoading: configLoading } = useAdminConfig(!!user?.isAdmin);
 
   const { mutate: verifyReg } = useVerifyRegistration();
   const { mutate: updateTournament, isPending: isUpdating } = useUpdateTournament();
@@ -141,6 +180,9 @@ export default function Admin() {
   const { mutate: banUser } = useBanUser();
   const { mutate: approveWithdrawal } = useApproveWithdrawal();
   const { mutate: kickPlayer, isPending: isKicking } = useKickPlayer();
+  const { mutate: updateConfig, isPending: isUpdatingConfig } = useUpdateAdminConfig();
+  const { mutate: uploadQr, isPending: isUploadingQr } = useUploadQrCode();
+  const { mutate: uploadBanner, isPending: isUploadingBanner } = useUploadBannerImage();
 
   // Redirect non-admins after auth loads
   if (!authLoading && !user?.isAdmin) {
@@ -215,6 +257,33 @@ export default function Admin() {
     });
   };
 
+  const handleSaveUpi = () => {
+    updateConfig({ upiId: upiForm.upiId || adminConfig?.upiId, upiName: upiForm.upiName || adminConfig?.upiName }, {
+      onSuccess: () => toast({ title: "Payment config updated!" }),
+      onError: () => toast({ title: "Failed to update config", variant: "destructive" }),
+    });
+  };
+
+  const handleQrUpload = () => {
+    if (!qrFile) return;
+    uploadQr(qrFile, {
+      onSuccess: (data) => { toast({ title: "QR code updated!", description: data.message }); setQrFile(null); setQrPreview(null); },
+      onError: () => toast({ title: "Failed to upload QR code", variant: "destructive" }),
+    });
+  };
+
+  const handleBannerUpload = () => {
+    if (!bannerFile) return;
+    uploadBanner(bannerFile, {
+      onSuccess: (data) => {
+        setCreateForm(f => ({ ...f, bannerUrl: data.url }));
+        toast({ title: "Banner uploaded!", description: "URL applied to form" });
+        setBannerFile(null);
+      },
+      onError: () => toast({ title: "Failed to upload image", variant: "destructive" }),
+    });
+  };
+
   const handleKick = () => {
     if (!kickDialog) return;
     kickPlayer({ tournamentId: kickDialog.tournamentId, regId: kickDialog.reg.id, reason: kickReason || "Disqualified by admin" }, {
@@ -246,8 +315,8 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="tournaments" className="w-full">
-        <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-5">
-          {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"]].map(([val, label]) => (
+        <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-6">
+          {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"],["settings","Settings"]].map(([val, label]) => (
             <TabsTrigger key={val} value={val} className="font-mono uppercase text-xs py-2.5 rounded-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:shadow-none border border-transparent data-[state=active]:border-primary/50">
               {label}
             </TabsTrigger>
@@ -368,9 +437,30 @@ export default function Admin() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1 md:col-span-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Banner Image URL <span className="text-muted-foreground text-xs normal-case">(optional — default image used if empty)</span></Label>
-                  <Input value={createForm.bannerUrl} onChange={e => setCreateForm(f => ({ ...f, bannerUrl: e.target.value }))} placeholder="https://..." className="bg-background/50 border-border/50 font-mono" />
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Banner Image <span className="text-muted-foreground text-xs normal-case">(optional — default mode image used if none uploaded)</span></Label>
+                  <input ref={bannerInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) { setBannerFile(file); setBannerPreview(URL.createObjectURL(file)); }
+                    }} />
+                  {bannerPreview || createForm.bannerUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img src={bannerPreview || createForm.bannerUrl} alt="Banner preview" className="w-24 h-14 object-cover rounded border border-border/50" onError={(e) => { (e.target as HTMLImageElement).src = getDefaultBanner(createForm.gameMode); }} />
+                      <div className="flex-1">
+                        {bannerFile && (
+                          <Button size="sm" onClick={handleBannerUpload} disabled={isUploadingBanner} className="bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold text-xs mr-2">
+                            {isUploadingBanner ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Uploading...</> : "Upload Image"}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="border-border/50 text-xs" onClick={() => { setBannerFile(null); setBannerPreview(null); setCreateForm(f => ({ ...f, bannerUrl: "" })); if (bannerInputRef.current) bannerInputRef.current.value = ""; }}>Remove</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button variant="outline" className="border-border/50 text-muted-foreground hover:text-foreground" onClick={() => bannerInputRef.current?.click()}>
+                      <Upload className="h-4 w-4 mr-2" /> Upload Banner Image
+                    </Button>
+                  )}
                 </div>
                 <div className="space-y-1 md:col-span-2">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Description <span className="text-muted-foreground text-xs normal-case">(optional)</span></Label>
@@ -431,11 +521,43 @@ export default function Admin() {
         {/* FINANCIAL */}
         <TabsContent value="financial" className="mt-6 space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="bg-card/50 border-secondary/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Total Deposits</p><p className="text-2xl font-bold font-display text-secondary">₹{financial?.totalDeposits || 0}</p><p className="text-xs text-muted-foreground font-mono">{financial?.depositCount || 0} transactions</p></CardContent></Card>
-            <Card className="bg-card/50 border-destructive/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Total Withdrawals</p><p className="text-2xl font-bold font-display text-destructive">₹{financial?.totalWithdrawals || 0}</p><p className="text-xs text-muted-foreground font-mono">{financial?.withdrawalCount || 0} requests</p></CardContent></Card>
+            <Card className="bg-card/50 border-secondary/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Total Deposits</p><p className="text-2xl font-bold font-display text-secondary">₹{financial?.totalDeposits || 0}</p><p className="text-xs text-muted-foreground font-mono">{financial?.depositCount || 0} approved</p></CardContent></Card>
+            <Card className="bg-card/50 border-destructive/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Total Withdrawals</p><p className="text-2xl font-bold font-display text-destructive">₹{financial?.totalWithdrawals || 0}</p><p className="text-xs text-muted-foreground font-mono">{financial?.withdrawalCount || 0} paid out</p></CardContent></Card>
+            <Card className="bg-card/50 border-blue-500/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Pending Deposits</p><p className="text-2xl font-bold font-display text-blue-400">{financial?.pendingDeposits?.length || 0}</p><p className="text-xs text-muted-foreground font-mono">Awaiting approval</p></CardContent></Card>
             <Card className="bg-card/50 border-yellow-500/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Pending Withdrawals</p><p className="text-2xl font-bold font-display text-yellow-500">{financial?.pendingWithdrawals?.length || 0}</p><p className="text-xs text-muted-foreground font-mono">Awaiting approval</p></CardContent></Card>
-            <Card className="bg-card/50 border-primary/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Net Balance</p><p className="text-2xl font-bold font-display text-primary">₹{(financial?.totalDeposits || 0) - (financial?.totalWithdrawals || 0)}</p><p className="text-xs text-muted-foreground font-mono">Deposits - Withdrawals</p></CardContent></Card>
           </div>
+
+          {/* Pending Deposits */}
+          <Card className="bg-card/50 border-blue-500/30">
+            <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-blue-400 flex items-center gap-2"><ArrowDownCircle className="h-5 w-5" /> Pending Deposit Requests</CardTitle></CardHeader>
+            <CardContent>
+              {financialLoading ? <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-12 bg-border/20 rounded animate-pulse" />)}</div>
+              : !financial?.pendingDeposits?.length ? <p className="text-center font-mono text-muted-foreground py-8">No pending deposits. All caught up!</p>
+              : (
+                <div className="overflow-x-auto">
+                  <Table className="font-mono">
+                    <TableHeader><TableRow><TableHead>Player</TableHead><TableHead>Reference / Details</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {financial.pendingDeposits.map(d => (
+                        <TableRow key={d.id}>
+                          <TableCell><span className="font-bold">{d.user?.inGameName || `User #${d.userId}`}</span><span className="block text-xs text-muted-foreground">{d.user?.email}</span></TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{d.description}</TableCell>
+                          <TableCell className="text-right font-bold text-blue-400">₹{d.amount}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{format(new Date(d.createdAt), "MMM d, h:mm a")}</TableCell>
+                          <TableCell className="text-right"><div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" className="h-8 px-2 border-secondary/50 text-secondary hover:bg-secondary/20 text-xs" onClick={() => handleWithdrawal(d.id, "approve")}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
+                            <Button size="sm" variant="outline" className="h-8 px-2 border-destructive/50 text-destructive hover:bg-destructive/20 text-xs" onClick={() => handleWithdrawal(d.id, "reject")}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
+                          </div></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Withdrawals */}
           <Card className="bg-card/50 border-border/50">
             <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-yellow-500 flex items-center gap-2"><ArrowUpCircle className="h-5 w-5" /> Pending Withdrawal Requests</CardTitle></CardHeader>
             <CardContent>
@@ -462,6 +584,92 @@ export default function Admin() {
                   </Table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* SETTINGS */}
+        <TabsContent value="settings" className="mt-6 space-y-6">
+          {/* UPI Config */}
+          <Card className="bg-card/50 border-secondary/30">
+            <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-secondary flex items-center gap-2"><Smartphone className="h-5 w-5" /> UPI Payment Config</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {configLoading ? <div className="h-20 bg-border/20 rounded animate-pulse" /> : (
+                <>
+                  <div className="bg-background/40 border border-border/30 rounded p-3 font-mono text-xs text-muted-foreground">
+                    <span className="text-foreground font-bold">Current: </span>{adminConfig?.upiName || "FF Arena Official"} — <span className="text-secondary">{adminConfig?.upiId || "ffarena@upi"}</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="font-mono text-xs uppercase text-muted-foreground">UPI ID</Label>
+                      <Input value={upiForm.upiId} onChange={e => setUpiForm(f => ({ ...f, upiId: e.target.value }))} placeholder={adminConfig?.upiId || "ffarena@upi"} className="bg-background/50 border-border/50 font-mono" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="font-mono text-xs uppercase text-muted-foreground">Display Name</Label>
+                      <Input value={upiForm.upiName} onChange={e => setUpiForm(f => ({ ...f, upiName: e.target.value }))} placeholder={adminConfig?.upiName || "FF Arena Official"} className="bg-background/50 border-border/50 font-mono" />
+                    </div>
+                  </div>
+                  <Button onClick={handleSaveUpi} disabled={isUpdatingConfig} className="bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">
+                    {isUpdatingConfig ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save UPI Config"}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* QR Code Upload */}
+          <Card className="bg-card/50 border-primary/30">
+            <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-primary flex items-center gap-2"><QrCode className="h-5 w-5" /> QR Code for Payments</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                {/* Current QR */}
+                <div className="shrink-0">
+                  <p className="text-xs font-mono text-muted-foreground uppercase mb-2">Current QR Code</p>
+                  {adminConfig?.qrCodeUrl ? (
+                    <div className="bg-white p-3 rounded-lg w-40 h-40 flex items-center justify-center">
+                      <img src={adminConfig.qrCodeUrl} alt="QR Code" className="w-full h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="bg-background/50 border border-dashed border-border rounded-lg w-40 h-40 flex flex-col items-center justify-center gap-2">
+                      <QrCode className="h-10 w-10 text-muted-foreground/30" />
+                      <p className="text-xs font-mono text-muted-foreground text-center">No QR code set</p>
+                    </div>
+                  )}
+                </div>
+                {/* Upload New QR */}
+                <div className="flex-1 space-y-3">
+                  <p className="text-sm font-mono text-muted-foreground">Upload a new QR code image. This will replace the current one and be shown to players when they choose to pay via QR.</p>
+                  <input
+                    ref={qrInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) { setQrFile(file); setQrPreview(URL.createObjectURL(file)); }
+                    }}
+                  />
+                  {qrPreview ? (
+                    <div className="space-y-3">
+                      <div className="bg-white p-3 rounded-lg w-40 h-40 flex items-center justify-center">
+                        <img src={qrPreview} alt="New QR preview" className="w-full h-full object-contain" />
+                      </div>
+                      <p className="text-xs font-mono text-secondary">{qrFile?.name}</p>
+                      <div className="flex gap-2">
+                        <Button onClick={handleQrUpload} disabled={isUploadingQr} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest">
+                          {isUploadingQr ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...</> : "Upload QR Code"}
+                        </Button>
+                        <Button variant="outline" className="border-border/50" onClick={() => { setQrFile(null); setQrPreview(null); if (qrInputRef.current) qrInputRef.current.value = ""; }}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button variant="outline" className="border-primary/40 text-primary hover:bg-primary/10" onClick={() => qrInputRef.current?.click()}>
+                      <Upload className="h-4 w-4 mr-2" /> Choose QR Code Image
+                    </Button>
+                  )}
+                  <p className="text-xs font-mono text-muted-foreground">Supported: JPG, PNG, WebP — Max 5MB</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

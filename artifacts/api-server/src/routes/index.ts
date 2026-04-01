@@ -10,6 +10,7 @@ import reportsRouter from "./reports";
 import adminRouter from "./admin";
 import walletRouter from "./wallet";
 import myMatchesRouter from "./my-matches";
+import adminConfigRouter from "./admin-config";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(reportsRouter);
 router.use(adminRouter);
 router.use(walletRouter);
 router.use(myMatchesRouter);
+router.use(adminConfigRouter);
 
 export default router;

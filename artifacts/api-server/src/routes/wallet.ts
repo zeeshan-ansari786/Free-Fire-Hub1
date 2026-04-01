@@ -17,8 +17,9 @@ router.get("/wallet", requireAuth, async (req, res): Promise<void> => {
   res.json({ walletBalance: user.walletBalance, transactions });
 });
 
+// Deposit now creates a PENDING transaction — admin must approve to credit wallet
 router.post("/wallet/deposit", requireAuth, async (req, res): Promise<void> => {
-  const { amount, transactionRef } = req.body;
+  const { amount, transactionRef, paymentMethod } = req.body;
   const amountNum = parseInt(amount, 10);
 
   if (!amountNum || amountNum <= 0 || amountNum > 50000) {
@@ -26,22 +27,27 @@ router.post("/wallet/deposit", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  if (!transactionRef || !transactionRef.trim()) {
+    res.status(400).json({ error: "Transaction reference or UTR number is required" });
+    return;
+  }
+
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  const newBalance = user.walletBalance + amountNum;
-
-  await db.update(usersTable).set({ walletBalance: newBalance }).where(eq(usersTable.id, req.session.userId!));
-
+  const method = paymentMethod === "upi" ? "UPI" : "QR Code";
   await db.insert(transactionsTable).values({
     userId: req.session.userId!,
     type: "deposit",
     amount: amountNum,
-    status: "completed",
-    description: transactionRef ? `Deposit via UPI (Ref: ${transactionRef})` : "Wallet deposit",
+    status: "pending",
+    description: `Deposit via ${method} | Ref: ${transactionRef.trim()}`,
   });
 
-  res.json({ walletBalance: newBalance, message: `₹${amountNum} added to wallet` });
+  res.json({
+    walletBalance: user.walletBalance,
+    message: `Deposit request of ₹${amountNum} submitted. Will be credited within 5 minutes after admin approval.`,
+  });
 });
 
 router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => {
