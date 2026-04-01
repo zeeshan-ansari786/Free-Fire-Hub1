@@ -4,7 +4,6 @@ import {
   useGetAdminStats, getGetAdminStatsQueryKey,
   useGetPendingRegistrations, getGetPendingRegistrationsQueryKey,
   useVerifyRegistration,
-  useCreateTournament,
   useUpdateTournament,
   usePostRoomDetails,
   useGetTournaments, getGetTournamentsQueryKey,
@@ -20,9 +19,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, Wallet, ArrowUpCircle } from "lucide-react";
+import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, UserX, Eye } from "lucide-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { getDefaultBanner } from "@/lib/tournament-defaults";
 
 type Tournament = {
   id: number; title: string; description?: string | null; startDateTime: string;
@@ -37,16 +38,30 @@ type UserEntry = {
   matchesPlayed: number; totalEarnings: number; createdAt: string;
 };
 
+type PlayerReg = {
+  id: number; userId: number; tournamentId: number; paymentStatus: string;
+  transactionId: string | null; adminNote: string | null; registeredAt: string;
+  teamMembers: Array<{ uid: string; name: string }> | null;
+  user: UserEntry | null;
+};
+
 type FinancialData = {
   totalDeposits: number; depositCount: number; totalWithdrawals: number; withdrawalCount: number;
   pendingWithdrawals: Array<{ id: number; userId: number; amount: number; description: string; createdAt: string; user: UserEntry | null }>;
 };
 
-function useAdminUsers() {
-  return useQuery({ queryKey: ["admin-users"], queryFn: () => customFetch<UserEntry[]>("/api/admin/users", { method: "GET" }) });
+function useAdminUsers(enabled = true) {
+  return useQuery({ queryKey: ["admin-users"], queryFn: () => customFetch<UserEntry[]>("/api/admin/users", { method: "GET" }), enabled });
 }
-function useAdminFinancial() {
-  return useQuery({ queryKey: ["admin-financial"], queryFn: () => customFetch<FinancialData>("/api/admin/financial", { method: "GET" }) });
+function useAdminFinancial(enabled = true) {
+  return useQuery({ queryKey: ["admin-financial"], queryFn: () => customFetch<FinancialData>("/api/admin/financial", { method: "GET" }), enabled });
+}
+function useTournamentPlayers(tournamentId: number | null) {
+  return useQuery({
+    queryKey: ["tournament-players", tournamentId],
+    queryFn: () => customFetch<PlayerReg[]>(`/api/tournaments/${tournamentId}/players`, { method: "GET" }),
+    enabled: !!tournamentId,
+  });
 }
 function useBanUser() {
   const qc = useQueryClient();
@@ -63,37 +78,82 @@ function useApproveWithdrawal() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-financial"] }),
   });
 }
+function useKickPlayer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tournamentId, regId, reason }: { tournamentId: number; regId: number; reason: string }) =>
+      customFetch<{ message: string }>(`/api/tournaments/${tournamentId}/players/${regId}/kick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["tournament-players", vars.tournamentId] });
+      qc.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) });
+    },
+  });
+}
+function useCreateTournamentDirect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      customFetch<Tournament>("/api/tournaments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) });
+      qc.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+    },
+  });
+}
+
+const statusColor: Record<string, string> = { upcoming: "text-primary border-primary/30", ongoing: "text-secondary border-secondary/30", completed: "text-muted-foreground border-border" };
+const payStatusColor: Record<string, string> = { verified: "text-secondary", free: "text-secondary", pending: "text-yellow-500", rejected: "text-destructive" };
 
 export default function Admin() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Must be before any conditional returns — redirect non-admins after auth loads
+  // This uses useEffect to avoid setState-during-render React error
+  const shouldRedirect = !authLoading && !user?.isAdmin;
+  if (shouldRedirect && typeof window !== "undefined") {
+    // Defer redirect to avoid setState-in-render issue
+    Promise.resolve().then(() => setLocation("/"));
+  }
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [editTournament, setEditTournament] = useState<Tournament | null>(null);
   const [roomTournament, setRoomTournament] = useState<Tournament | null>(null);
+  const [playersTournament, setPlayersTournament] = useState<Tournament | null>(null);
+  const [kickDialog, setKickDialog] = useState<{ reg: PlayerReg; tournamentId: number } | null>(null);
+  const [kickReason, setKickReason] = useState("");
   const [editForm, setEditForm] = useState({ title: "", description: "", startDateTime: "", mapName: "", gameMode: "", maxSlots: "", status: "", bannerUrl: "" });
   const [roomForm, setRoomForm] = useState({ roomId: "", roomPassword: "" });
-  const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "", entryFee: "0", bannerUrl: "" });
+  const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
 
   const { data: stats } = useGetAdminStats({ query: { enabled: !!user?.isAdmin, queryKey: getGetAdminStatsQueryKey() } });
   const { data: pendingRegs } = useGetPendingRegistrations({ query: { enabled: !!user?.isAdmin, queryKey: getGetPendingRegistrationsQueryKey() } });
   const { data: tournamentsData } = useGetTournaments({ limit: 50 }, { query: { enabled: !!user?.isAdmin, queryKey: getGetTournamentsQueryKey({ limit: 50 }) } });
-  const { data: adminUsers, isLoading: usersLoading } = useAdminUsers();
-  const { data: financial, isLoading: financialLoading } = useAdminFinancial();
+  const { data: adminUsers, isLoading: usersLoading } = useAdminUsers(!!user?.isAdmin);
+  const { data: financial, isLoading: financialLoading } = useAdminFinancial(!!user?.isAdmin);
+  const { data: tournamentPlayers, isLoading: playersLoading } = useTournamentPlayers(playersTournament?.id ?? null);
 
   const { mutate: verifyReg } = useVerifyRegistration();
   const { mutate: updateTournament, isPending: isUpdating } = useUpdateTournament();
   const { mutate: postRoom, isPending: isPostingRoom } = usePostRoomDetails();
-  const { mutate: createTournament, isPending: isCreating } = useCreateTournament();
+  const { mutate: createTournament, isPending: isCreating } = useCreateTournamentDirect();
   const { mutate: banUser } = useBanUser();
   const { mutate: approveWithdrawal } = useApproveWithdrawal();
+  const { mutate: kickPlayer, isPending: isKicking } = useKickPlayer();
 
-  if (!authLoading && !user?.isAdmin) { setLocation("/"); return null; }
+  // Redirect non-admins after auth loads
+  if (!authLoading && !user?.isAdmin) {
+    return null; // useEffect below handles the redirect
+  }
 
   const handleVerify = (regId: number, status: "verified" | "rejected") => {
     verifyReg({ id: regId, data: { status } }, {
-      onSuccess: () => { toast({ title: `Registration ${status}` }); queryClient.invalidateQueries({ queryKey: getGetPendingRegistrationsQueryKey() }); queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() }); },
+      onSuccess: () => {
+        toast({ title: `Registration ${status}` });
+        queryClient.invalidateQueries({ queryKey: getGetPendingRegistrationsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+      },
       onError: (err) => toast({ title: "Error", description: (err as any)?.error?.message, variant: "destructive" })
     });
   };
@@ -120,13 +180,28 @@ export default function Admin() {
   };
 
   const handleCreate = () => {
-    createTournament({ data: { title: createForm.title, description: createForm.description || undefined, startDateTime: new Date(createForm.startDateTime).toISOString(), mapName: createForm.mapName as any, gameMode: createForm.gameMode as any, maxSlots: parseInt(createForm.maxSlots), prizePool: parseFloat(createForm.prizePool) || 0, entryFee: parseFloat(createForm.entryFee) || 0, bannerUrl: createForm.bannerUrl || undefined } }, {
-      onSuccess: () => { toast({ title: "Tournament created!" }); setCreateForm({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "", entryFee: "0", bannerUrl: "" }); queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) }); },
-      onError: (err) => toast({ title: "Failed", description: (err as any)?.error?.message, variant: "destructive" })
+    if (!createForm.title.trim()) { toast({ title: "Tournament title is required", variant: "destructive" }); return; }
+    if (!createForm.startDateTime) { toast({ title: "Start date & time is required", variant: "destructive" }); return; }
+    createTournament({
+      title: createForm.title.trim(),
+      description: createForm.description.trim() || undefined,
+      startDateTime: new Date(createForm.startDateTime).toISOString(),
+      mapName: createForm.mapName,
+      gameMode: createForm.gameMode,
+      maxSlots: parseInt(createForm.maxSlots) || 100,
+      prizePool: parseFloat(createForm.prizePool) || 0,
+      entryFee: parseFloat(createForm.entryFee) || 0,
+      bannerUrl: createForm.bannerUrl.trim() || undefined,
+    }, {
+      onSuccess: () => {
+        toast({ title: "Tournament created!", description: `"${createForm.title}" is now live.` });
+        setCreateForm({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
+      },
+      onError: (err: any) => toast({ title: "Failed to create", description: err?.data?.error || err?.message || "Something went wrong", variant: "destructive" }),
     });
   };
 
-  const handleBan = (userId: number, currentlyBanned: boolean) => {
+  const handleBan = (userId: number) => {
     banUser(userId, {
       onSuccess: (data) => toast({ title: data.message }),
       onError: () => toast({ title: "Failed to update user", variant: "destructive" }),
@@ -140,7 +215,17 @@ export default function Admin() {
     });
   };
 
-  const statusColor: Record<string, string> = { upcoming: "text-primary border-primary/30", ongoing: "text-secondary border-secondary/30", completed: "text-muted-foreground border-border" };
+  const handleKick = () => {
+    if (!kickDialog) return;
+    kickPlayer({ tournamentId: kickDialog.tournamentId, regId: kickDialog.reg.id, reason: kickReason || "Disqualified by admin" }, {
+      onSuccess: () => {
+        toast({ title: "Player disqualified", description: `${kickDialog.reg.user?.inGameName} removed from tournament` });
+        setKickDialog(null);
+        setKickReason("");
+      },
+      onError: () => toast({ title: "Failed to kick player", variant: "destructive" }),
+    });
+  };
 
   return (
     <div className="space-y-8 pb-12">
@@ -184,8 +269,8 @@ export default function Admin() {
                       {pendingRegs?.map((reg: any) => (
                         <TableRow key={reg.id}>
                           <TableCell><span className="block font-bold text-white">{reg.user.inGameName}</span><span className="text-xs text-muted-foreground">UID: {reg.user.freeFireUid}</span></TableCell>
-                          <TableCell>T#{reg.tournamentId}</TableCell>
-                          <TableCell><span className="block text-primary">{reg.transactionId || 'None'}</span>{reg.paymentScreenshotUrl && <a href={reg.paymentScreenshotUrl} target="_blank" rel="noreferrer" className="text-xs text-secondary hover:underline">View Proof</a>}</TableCell>
+                          <TableCell className="text-xs">T#{reg.tournamentId}</TableCell>
+                          <TableCell><span className="block text-primary text-xs">{reg.transactionId || 'None'}</span>{reg.paymentScreenshotUrl && <a href={reg.paymentScreenshotUrl} target="_blank" rel="noreferrer" className="text-xs text-secondary hover:underline">View Proof</a>}</TableCell>
                           <TableCell className="text-xs">{format(new Date(reg.registeredAt), "MMM d, h:mm a")}</TableCell>
                           <TableCell className="text-right"><div className="flex justify-end gap-2">
                             <Button size="sm" variant="outline" className="h-8 px-2 border-secondary/50 text-secondary hover:bg-secondary/20" onClick={() => handleVerify(reg.id, "verified")}><CheckCircle className="h-4 w-4" /></Button>
@@ -202,28 +287,36 @@ export default function Admin() {
         </TabsContent>
 
         {/* TOURNAMENTS */}
-        <TabsContent value="tournaments" className="mt-6 space-y-4">
+        <TabsContent value="tournaments" className="mt-6 space-y-3">
           {!tournamentsData?.tournaments?.length ? (
             <Card className="bg-card/50 border-border/50"><CardContent className="py-12 text-center font-mono text-muted-foreground">No tournaments found.</CardContent></Card>
           ) : (
             (tournamentsData.tournaments as Tournament[]).map((t) => (
-              <Card key={t.id} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
-                <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0"><Swords className="h-5 w-5 text-primary/60" /></div>
-                    <div>
-                      <h3 className="font-bold font-display uppercase tracking-wider text-foreground">{t.title}</h3>
-                      <div className="flex flex-wrap gap-3 mt-1">
-                        <span className={`text-xs font-mono px-2 py-0.5 border rounded ${statusColor[t.status] || "text-muted-foreground border-border"}`}>{t.status.toUpperCase()}</span>
-                        <span className="text-xs font-mono text-muted-foreground">{format(new Date(t.startDateTime), "MMM d, h:mm a")}</span>
-                        <span className="text-xs font-mono text-muted-foreground">{t.filledSlots}/{t.maxSlots} slots · {t.mapName} · {t.gameMode}</span>
-                      </div>
-                      {t.roomId && <p className="text-xs font-mono text-secondary mt-1">Room: <span className="text-foreground">{t.roomId}</span> | Pass: <span className="text-foreground">{t.roomPassword}</span></p>}
-                    </div>
+              <Card key={t.id} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors overflow-hidden">
+                <CardContent className="p-0 flex flex-col sm:flex-row sm:items-center gap-0">
+                  <div className="w-full sm:w-20 h-16 sm:h-full shrink-0">
+                    <img
+                      src={t.bannerUrl || getDefaultBanner(t.gameMode)}
+                      alt={t.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = getDefaultBanner("squad"); }}
+                    />
                   </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button size="sm" variant="outline" className="border-primary/40 text-primary hover:bg-primary/10 font-mono text-xs" onClick={() => openEdit(t)}><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
-                    <Button size="sm" variant="outline" className="border-secondary/40 text-secondary hover:bg-secondary/10 font-mono text-xs" onClick={() => { setRoomTournament(t); setRoomForm({ roomId: t.roomId ?? "", roomPassword: t.roomPassword ?? "" }); }}><Key className="h-3 w-3 mr-1" /> Room</Button>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold font-display uppercase tracking-wide text-foreground text-sm truncate">{t.title}</h3>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        <span className={`text-xs font-mono px-1.5 py-0.5 border rounded ${statusColor[t.status] || ""}`}>{t.status.toUpperCase()}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{format(new Date(t.startDateTime), "MMM d, h:mm a")}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{t.filledSlots}/{t.maxSlots} · {t.mapName} · {t.gameMode.toUpperCase()}</span>
+                      </div>
+                      {t.roomId && <p className="text-xs font-mono text-secondary mt-1">Room: <span className="text-foreground">{t.roomId}</span> | <span className="text-foreground">{t.roomPassword}</span></p>}
+                    </div>
+                    <div className="flex gap-2 shrink-0 flex-wrap">
+                      <Button size="sm" variant="outline" className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 font-mono text-xs h-8" onClick={() => setPlayersTournament(t)}><Eye className="h-3 w-3 mr-1" /> Players</Button>
+                      <Button size="sm" variant="outline" className="border-primary/40 text-primary hover:bg-primary/10 font-mono text-xs h-8" onClick={() => openEdit(t)}><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
+                      <Button size="sm" variant="outline" className="border-secondary/40 text-secondary hover:bg-secondary/10 font-mono text-xs h-8" onClick={() => { setRoomTournament(t); setRoomForm({ roomId: t.roomId ?? "", roomPassword: t.roomPassword ?? "" }); }}><Key className="h-3 w-3 mr-1" /> Room</Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -234,29 +327,64 @@ export default function Admin() {
         {/* CREATE */}
         <TabsContent value="create" className="mt-6">
           <Card className="bg-card/50 border-secondary/30">
-            <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-secondary flex items-center gap-2"><Plus className="h-5 w-5" /> Create Tournament</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+            <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-secondary flex items-center gap-2"><Plus className="h-5 w-5" /> Create New Tournament</CardTitle></CardHeader>
+            <CardContent className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[["Title *","title","text","Tournament name"],["Start Date & Time *","startDateTime","datetime-local",""],["Max Slots *","maxSlots","number","100"],["Entry Fee (₹)","entryFee","number","0"],["Prize Pool (₹)","prizePool","number","0"],["Banner Image URL","bannerUrl","text","https://..."]].map(([label, key, type, placeholder]) => (
-                  <div key={key} className="space-y-1">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">{label}</Label>
-                    <Input type={type} value={(createForm as any)[key]} onChange={e => setCreateForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder || undefined} className="bg-background/50 border-border/50 font-mono" />
-                  </div>
-                ))}
+                <div className="space-y-1 md:col-span-2">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Title <span className="text-destructive">*</span></Label>
+                  <Input value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Friday Night Battleground" className="bg-background/50 border-border/50 font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Start Date & Time <span className="text-destructive">*</span></Label>
+                  <Input type="datetime-local" value={createForm.startDateTime} onChange={e => setCreateForm(f => ({ ...f, startDateTime: e.target.value }))} className="bg-background/50 border-border/50 font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Max Slots</Label>
+                  <Input type="number" value={createForm.maxSlots} onChange={e => setCreateForm(f => ({ ...f, maxSlots: e.target.value }))} className="bg-background/50 border-border/50 font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Entry Fee (₹)</Label>
+                  <Input type="number" value={createForm.entryFee} onChange={e => setCreateForm(f => ({ ...f, entryFee: e.target.value }))} placeholder="0 for free tournament" className="bg-background/50 border-border/50 font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Prize Pool (₹)</Label>
+                  <Input type="number" value={createForm.prizePool} onChange={e => setCreateForm(f => ({ ...f, prizePool: e.target.value }))} className="bg-background/50 border-border/50 font-mono" />
+                </div>
                 <div className="space-y-1">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Map</Label>
-                  <Select value={createForm.mapName} onValueChange={v => setCreateForm(f => ({ ...f, mapName: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger><SelectContent>{["Bermuda","Kalahari","Purgatory","Alpine"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
+                  <Select value={createForm.mapName} onValueChange={v => setCreateForm(f => ({ ...f, mapName: v }))}>
+                    <SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger>
+                    <SelectContent>{["Bermuda","Kalahari","Purgatory","Alpine"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Game Mode</Label>
-                  <Select value={createForm.gameMode} onValueChange={v => setCreateForm(f => ({ ...f, gameMode: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger><SelectContent>{["squad","duo","solo"].map(m => <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</SelectItem>)}</SelectContent></Select>
+                  <Select value={createForm.gameMode} onValueChange={v => setCreateForm(f => ({ ...f, gameMode: v }))}>
+                    <SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="squad">Squad (4 Players)</SelectItem>
+                      <SelectItem value="duo">Duo (2 Players)</SelectItem>
+                      <SelectItem value="solo">Solo (1 Player)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Banner Image URL <span className="text-muted-foreground text-xs normal-case">(optional — default image used if empty)</span></Label>
+                  <Input value={createForm.bannerUrl} onChange={e => setCreateForm(f => ({ ...f, bannerUrl: e.target.value }))} placeholder="https://..." className="bg-background/50 border-border/50 font-mono" />
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Description <span className="text-muted-foreground text-xs normal-case">(optional)</span></Label>
+                  <Input value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Rules, format, special notes..." className="bg-background/50 border-border/50 font-mono" />
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Description</Label>
-                <Input value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional description" className="bg-background/50 border-border/50 font-mono" />
-              </div>
-              <Button onClick={handleCreate} disabled={isCreating || !createForm.title || !createForm.startDateTime} className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">
+              {/* Preview */}
+              {createForm.gameMode && (
+                <div className="flex items-center gap-3 p-3 bg-background/30 border border-border/30 rounded">
+                  <img src={createForm.bannerUrl || getDefaultBanner(createForm.gameMode)} alt="Preview" className="w-16 h-10 object-cover rounded" onError={(e) => { (e.target as HTMLImageElement).src = getDefaultBanner("squad"); }} />
+                  <p className="text-xs font-mono text-muted-foreground">Default banner preview for <span className="text-foreground uppercase">{createForm.gameMode}</span> mode</p>
+                </div>
+              )}
+              <Button onClick={handleCreate} disabled={isCreating} className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest h-12 text-base">
                 {isCreating ? "Creating..." : "Create Tournament"}
               </Button>
             </CardContent>
@@ -279,23 +407,14 @@ export default function Admin() {
                     <TableBody>
                       {adminUsers.filter(u => !u.isAdmin).map(u => (
                         <TableRow key={u.id} className={u.isBanned ? "opacity-50" : ""}>
-                          <TableCell>
-                            <span className="block font-bold">{u.inGameName}</span>
-                            <span className="text-xs text-muted-foreground">{u.email}</span>
-                          </TableCell>
+                          <TableCell><span className="block font-bold">{u.inGameName}</span><span className="text-xs text-muted-foreground">{u.email}</span></TableCell>
                           <TableCell className="text-muted-foreground text-xs">{u.freeFireUid}</TableCell>
                           <TableCell className="text-right text-secondary font-bold">₹{u.walletBalance}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{u.matchesPlayed}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{format(new Date(u.createdAt), "MMM d, yyyy")}</TableCell>
-                          <TableCell>
-                            {u.isBanned ? (
-                              <span className="text-xs text-destructive border border-destructive/30 px-2 py-0.5 rounded">BANNED</span>
-                            ) : (
-                              <span className="text-xs text-secondary border border-secondary/30 px-2 py-0.5 rounded">ACTIVE</span>
-                            )}
-                          </TableCell>
+                          <TableCell>{u.isBanned ? <span className="text-xs text-destructive border border-destructive/30 px-2 py-0.5 rounded">BANNED</span> : <span className="text-xs text-secondary border border-secondary/30 px-2 py-0.5 rounded">ACTIVE</span>}</TableCell>
                           <TableCell className="text-right">
-                            <Button size="sm" variant="outline" className={`h-8 px-3 text-xs font-mono ${u.isBanned ? "border-secondary/50 text-secondary hover:bg-secondary/10" : "border-destructive/50 text-destructive hover:bg-destructive/10"}`} onClick={() => handleBan(u.id, u.isBanned)}>
+                            <Button size="sm" variant="outline" className={`h-8 px-3 text-xs font-mono ${u.isBanned ? "border-secondary/50 text-secondary hover:bg-secondary/10" : "border-destructive/50 text-destructive hover:bg-destructive/10"}`} onClick={() => handleBan(u.id)}>
                               <Ban className="h-3 w-3 mr-1" /> {u.isBanned ? "Unban" : "Ban"}
                             </Button>
                           </TableCell>
@@ -311,23 +430,18 @@ export default function Admin() {
 
         {/* FINANCIAL */}
         <TabsContent value="financial" className="mt-6 space-y-6">
-          {/* Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="bg-card/50 border-secondary/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Total Deposits</p><p className="text-2xl font-bold font-display text-secondary">₹{financial?.totalDeposits || 0}</p><p className="text-xs text-muted-foreground font-mono">{financial?.depositCount || 0} transactions</p></CardContent></Card>
             <Card className="bg-card/50 border-destructive/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Total Withdrawals</p><p className="text-2xl font-bold font-display text-destructive">₹{financial?.totalWithdrawals || 0}</p><p className="text-xs text-muted-foreground font-mono">{financial?.withdrawalCount || 0} requests</p></CardContent></Card>
             <Card className="bg-card/50 border-yellow-500/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Pending Withdrawals</p><p className="text-2xl font-bold font-display text-yellow-500">{financial?.pendingWithdrawals?.length || 0}</p><p className="text-xs text-muted-foreground font-mono">Awaiting approval</p></CardContent></Card>
             <Card className="bg-card/50 border-primary/30"><CardContent className="p-5"><p className="text-xs font-mono text-muted-foreground">Net Balance</p><p className="text-2xl font-bold font-display text-primary">₹{(financial?.totalDeposits || 0) - (financial?.totalWithdrawals || 0)}</p><p className="text-xs text-muted-foreground font-mono">Deposits - Withdrawals</p></CardContent></Card>
           </div>
-
-          {/* Pending Withdrawals */}
           <Card className="bg-card/50 border-border/50">
             <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-yellow-500 flex items-center gap-2"><ArrowUpCircle className="h-5 w-5" /> Pending Withdrawal Requests</CardTitle></CardHeader>
             <CardContent>
-              {financialLoading ? (
-                <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-12 bg-border/20 rounded animate-pulse" />)}</div>
-              ) : !financial?.pendingWithdrawals?.length ? (
-                <p className="text-center font-mono text-muted-foreground py-8">No pending withdrawals.</p>
-              ) : (
+              {financialLoading ? <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-12 bg-border/20 rounded animate-pulse" />)}</div>
+              : !financial?.pendingWithdrawals?.length ? <p className="text-center font-mono text-muted-foreground py-8">No pending withdrawals.</p>
+              : (
                 <div className="overflow-x-auto">
                   <Table className="font-mono">
                     <TableHeader><TableRow><TableHead>Player</TableHead><TableHead>UPI Details</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
@@ -364,18 +478,18 @@ export default function Admin() {
                 <Input type={type} value={(editForm as any)[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} className="bg-background/50 border-border/50 font-mono" />
               </div>
             ))}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="font-mono text-xs uppercase text-muted-foreground">Map</Label>
-                <Select value={editForm.mapName} onValueChange={v => setEditForm(f => ({ ...f, mapName: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger><SelectContent>{["Bermuda","Kalahari","Purgatory","Alpine"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
+                <Select value={editForm.mapName} onValueChange={v => setEditForm(f => ({ ...f, mapName: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono text-xs"><SelectValue /></SelectTrigger><SelectContent>{["Bermuda","Kalahari","Purgatory","Alpine"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
               </div>
               <div className="space-y-1">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Game Mode</Label>
-                <Select value={editForm.gameMode} onValueChange={v => setEditForm(f => ({ ...f, gameMode: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger><SelectContent>{["squad","duo","solo"].map(m => <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</SelectItem>)}</SelectContent></Select>
+                <Label className="font-mono text-xs uppercase text-muted-foreground">Mode</Label>
+                <Select value={editForm.gameMode} onValueChange={v => setEditForm(f => ({ ...f, gameMode: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono text-xs"><SelectValue /></SelectTrigger><SelectContent>{["squad","duo","solo"].map(m => <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</SelectItem>)}</SelectContent></Select>
               </div>
               <div className="space-y-1">
                 <Label className="font-mono text-xs uppercase text-muted-foreground">Status</Label>
-                <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue /></SelectTrigger><SelectContent>{["upcoming","ongoing","completed"].map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</SelectItem>)}</SelectContent></Select>
+                <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}><SelectTrigger className="bg-background/50 border-border/50 font-mono text-xs"><SelectValue /></SelectTrigger><SelectContent>{["upcoming","ongoing","completed"].map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</SelectItem>)}</SelectContent></Select>
               </div>
             </div>
             <div className="flex gap-3 pt-2">
@@ -398,6 +512,94 @@ export default function Admin() {
             <div className="flex gap-3 pt-2">
               <Button variant="outline" className="flex-1 border-border/50" onClick={() => setRoomTournament(null)}>Cancel</Button>
               <Button onClick={handleRoomSave} disabled={isPostingRoom || !roomForm.roomId || !roomForm.roomPassword} className="flex-1 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">{isPostingRoom ? "Saving..." : "Post Room"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Players Dialog */}
+      <Dialog open={!!playersTournament} onOpenChange={open => !open && setPlayersTournament(null)}>
+        <DialogContent className="bg-card border-blue-500/30 max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display uppercase tracking-wider text-blue-400 flex items-center gap-2"><Eye className="h-5 w-5" /> Tournament Players</DialogTitle>
+            <p className="text-xs font-mono text-muted-foreground mt-1">{playersTournament?.title} · {playersTournament?.filledSlots}/{playersTournament?.maxSlots} slots filled</p>
+          </DialogHeader>
+          {playersLoading ? (
+            <div className="space-y-3 pt-4">{[1,2,3].map(i => <div key={i} className="h-14 bg-border/20 rounded animate-pulse" />)}</div>
+          ) : !tournamentPlayers?.length ? (
+            <p className="text-center font-mono text-muted-foreground py-10">No players registered yet.</p>
+          ) : (
+            <div className="overflow-x-auto pt-2">
+              <Table className="font-mono text-sm">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Player / IGN</TableHead>
+                    <TableHead>UID</TableHead>
+                    <TableHead>Team Members</TableHead>
+                    <TableHead>Txn ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tournamentPlayers.map(reg => (
+                    <TableRow key={reg.id} className={reg.paymentStatus === "rejected" ? "opacity-40" : ""}>
+                      <TableCell>
+                        <span className="block font-bold">{reg.user?.inGameName ?? `User #${reg.userId}`}</span>
+                        <span className="text-xs text-muted-foreground">{reg.user?.email}</span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{reg.user?.freeFireUid}</TableCell>
+                      <TableCell>
+                        {reg.teamMembers && reg.teamMembers.length > 0 ? (
+                          <div className="space-y-0.5">
+                            {reg.teamMembers.map((m, i) => (
+                              <div key={i} className="text-xs text-muted-foreground">{m.name} <span className="text-foreground/50">({m.uid})</span></div>
+                            ))}
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{reg.transactionId || '—'}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs font-mono px-2 py-0.5 border rounded ${payStatusColor[reg.paymentStatus] || "text-muted-foreground border-border"} border-current/30`}>
+                          {reg.paymentStatus.toUpperCase()}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {reg.paymentStatus !== "rejected" && (
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
+                            onClick={() => { setKickDialog({ reg, tournamentId: playersTournament!.id }); setKickReason(""); }}>
+                            <UserX className="h-3 w-3 mr-1" /> Kick
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Kick Confirm Dialog */}
+      <Dialog open={!!kickDialog} onOpenChange={open => !open && setKickDialog(null)}>
+        <DialogContent className="bg-card border-destructive/30 max-w-md">
+          <DialogHeader><DialogTitle className="font-display uppercase tracking-wider text-destructive flex items-center gap-2"><UserX className="h-5 w-5" /> Disqualify Player</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="bg-destructive/10 border border-destructive/30 rounded p-3 font-mono text-sm">
+              <p className="font-bold text-foreground">{kickDialog?.reg.user?.inGameName}</p>
+              <p className="text-xs text-muted-foreground">UID: {kickDialog?.reg.user?.freeFireUid}</p>
+            </div>
+            <p className="text-sm font-mono text-muted-foreground">This will remove the player from the tournament. If they paid an entry fee, it will be refunded to their wallet.</p>
+            <div className="space-y-1">
+              <Label className="font-mono text-xs uppercase text-muted-foreground">Reason (optional)</Label>
+              <Input value={kickReason} onChange={e => setKickReason(e.target.value)} placeholder="e.g. Hacking, cheating, no-show..." className="bg-background/50 border-border/50 font-mono" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" className="flex-1 border-border/50" onClick={() => setKickDialog(null)}>Cancel</Button>
+              <Button onClick={handleKick} disabled={isKicking} className="flex-1 bg-destructive hover:bg-destructive/90 text-white font-bold uppercase tracking-widest">
+                {isKicking ? "Disqualifying..." : "Confirm Kick"}
+              </Button>
             </div>
           </div>
         </DialogContent>

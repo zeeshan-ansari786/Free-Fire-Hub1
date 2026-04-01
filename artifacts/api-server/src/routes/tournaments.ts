@@ -173,4 +173,61 @@ router.post("/tournaments/:id/room", requireAdmin, async (req, res): Promise<voi
   res.json(tournament);
 });
 
+// Admin: kick/disqualify a player from a tournament
+router.post("/tournaments/:id/players/:regId/kick", requireAdmin, async (req, res): Promise<void> => {
+  const tournamentId = parseInt(req.params.id, 10);
+  const regId = parseInt(req.params.regId, 10);
+
+  if (isNaN(tournamentId) || isNaN(regId)) {
+    res.status(400).json({ error: "Invalid IDs" });
+    return;
+  }
+
+  const { reason } = req.body;
+
+  const [reg] = await db.select().from(registrationsTable)
+    .where(and(eq(registrationsTable.id, regId), eq(registrationsTable.tournamentId, tournamentId)));
+
+  if (!reg) {
+    res.status(404).json({ error: "Registration not found" });
+    return;
+  }
+
+  // Mark registration as rejected with reason
+  await db.update(registrationsTable)
+    .set({ paymentStatus: "rejected", adminNote: reason || "Disqualified by admin" })
+    .where(eq(registrationsTable.id, regId));
+
+  // If they paid entry, refund to wallet
+  const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, tournamentId));
+  if (tournament && tournament.entryFee > 0 && (reg.paymentStatus === "verified" || reg.paymentStatus === "free")) {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, reg.userId));
+    if (user) {
+      await db.update(usersTable)
+        .set({ walletBalance: user.walletBalance + tournament.entryFee })
+        .where(eq(usersTable.id, reg.userId));
+    }
+    // Reduce filled slots
+    await db.update(tournamentsTable)
+      .set({ filledSlots: Math.max(0, (tournament.filledSlots ?? 1) - 1) })
+      .where(eq(tournamentsTable.id, tournamentId));
+  }
+
+  res.json({ message: "Player disqualified" });
+});
+
+// Admin: get all players in a tournament
+router.get("/tournaments/:id/players", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const regs = await db.select().from(registrationsTable).where(eq(registrationsTable.tournamentId, id));
+  const results = await Promise.all(regs.map(async (reg) => {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, reg.userId));
+    return { ...reg, user: user ? formatUser(user) : null };
+  }));
+
+  res.json(results);
+});
+
 export default router;

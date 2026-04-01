@@ -4,8 +4,8 @@ import { useGetTournaments, getGetTournamentsQueryKey, type GetTournamentsStatus
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Swords, IndianRupee, Zap, Map, Users } from "lucide-react";
+import { getDefaultBanner } from "@/lib/tournament-defaults";
 
 export default function Tournaments() {
   const [statusFilter, setStatusFilter] = useState<GetTournamentsStatus | undefined>("upcoming");
@@ -90,13 +90,12 @@ export default function Tournaments() {
                 </div>
 
                 <div className="w-full sm:w-48 h-48 sm:h-auto bg-muted relative shrink-0">
-                  {t.bannerUrl ? (
-                    <img src={t.bannerUrl} alt={t.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/10 to-card flex items-center justify-center border-r border-border/50">
-                      <Swords className="h-10 w-10 text-primary/30" />
-                    </div>
-                  )}
+                  <img
+                    src={t.bannerUrl || getDefaultBanner(t.gameMode)}
+                    alt={t.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => { (e.target as HTMLImageElement).src = getDefaultBanner("squad"); }}
+                  />
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent to-card hidden sm:block" />
                   <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent sm:hidden" />
                 </div>

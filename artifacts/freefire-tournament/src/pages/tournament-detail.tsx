@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "wouter";
+import { getDefaultBanner } from "@/lib/tournament-defaults";
 import { 
   useGetTournament, getGetTournamentQueryKey, 
   useRegisterForTournament, 
@@ -121,13 +122,12 @@ export default function TournamentDetail() {
     <div className="space-y-8 pb-12">
       {/* Banner */}
       <div className="relative h-56 md:h-72 rounded-xl overflow-hidden border border-primary/20">
-        {tournament.bannerUrl ? (
-          <img src={tournament.bannerUrl} alt={tournament.title} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary/20 via-card to-card flex items-center justify-center">
-            <Swords className="h-20 w-20 text-primary/20" />
-          </div>
-        )}
+        <img
+          src={tournament.bannerUrl || getDefaultBanner(tournament.gameMode)}
+          alt={tournament.title}
+          className="w-full h-full object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).src = getDefaultBanner("squad"); }}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
         <div className="absolute bottom-0 left-0 p-6">
           <div className="flex flex-wrap gap-2 mb-3">

@@ -64,12 +64,15 @@ artifacts-monorepo/
 - **Reports**: Report player button with admin review
 - **Wallet System**: Deposit via UPI, withdraw to UPI (min ₹100, admin approval), full transaction history
 - **My Matches**: Upcoming matches with room unlock countdown, match history with results and prizes
+- **Default Tournament Banners**: Mode-specific Unsplash images (solo/duo/squad) as fallback when no bannerUrl set; `getDefaultBanner(gameMode)` in `lib/tournament-defaults.ts`
 - **Admin Dashboard** (5 tabs):
   1. Verifications — Approve/reject pending payments
-  2. Tournaments — Edit tournament details, post room details
-  3. Create — Create new tournaments
+  2. Tournaments — Edit tournament details, post room details; **Players button** opens player inspection dialog
+  3. Create — Create new tournaments (with default banner preview)
   4. Players — Ban/unban users
   5. Financial — Deposit/withdrawal stats, approve/reject withdrawal requests
+- **Admin Player Inspection**: View all registrations per tournament; Kick player (disqualify + optional reason + entry fee refund)
+- **Kick endpoint**: `POST /api/tournaments/:id/players/:regId/kick` — refunds entry fee if paid, decrements filledSlots
 
 ## DB Schema
 
