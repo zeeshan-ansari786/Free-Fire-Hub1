@@ -65,14 +65,19 @@ artifacts-monorepo/
 - **Wallet System**: Deposit via UPI, withdraw to UPI (min ₹100, admin approval), full transaction history
 - **My Matches**: Upcoming matches with room unlock countdown, match history with results and prizes
 - **Default Tournament Banners**: Mode-specific Unsplash images (solo/duo/squad) as fallback when no bannerUrl set; `getDefaultBanner(gameMode)` in `lib/tournament-defaults.ts`
-- **Admin Dashboard** (5 tabs):
+- **Admin Dashboard** (7 tabs):
   1. Verifications — Approve/reject pending payments
-  2. Tournaments — Edit tournament details, post room details; **Players button** opens player inspection dialog
-  3. Create — Create new tournaments (with default banner preview)
+  2. Tournaments — Edit tournament details, post room details; Players button opens player inspection dialog
+  3. Create — Create new tournaments (with image upload for banner)
   4. Players — Ban/unban users
-  5. Financial — Deposit/withdrawal stats, approve/reject withdrawal requests
+  5. Financial — Deposit/withdrawal stats, approve/reject both deposit and withdrawal requests
+  6. Results — Post-tournament results: select tournament, enter kills/placement/prize per player, auto-calculates points, updates global leaderboard
+  7. Settings — UPI ID/name config + QR code image upload
 - **Admin Player Inspection**: View all registrations per tournament; Kick player (disqualify + optional reason + entry fee refund)
 - **Kick endpoint**: `POST /api/tournaments/:id/players/:regId/kick` — refunds entry fee if paid, decrements filledSlots
+- **Wallet-based entry fee**: Registration for paid tournaments deducts from wallet instantly (auto-verified); insufficient balance returns 402 `INSUFFICIENT_BALANCE` code → frontend shows deposit dialog
+- **Back button**: Tournament detail page has "Back to Tournaments" navigation button
+- **Tournament results**: Completed tournaments show final results table with Booyah winner, kills, placement, prize won; admin posts via Results tab
 
 ## DB Schema
 

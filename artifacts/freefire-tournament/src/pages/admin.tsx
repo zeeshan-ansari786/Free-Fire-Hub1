@@ -120,6 +120,24 @@ function useKickPlayer() {
     },
   });
 }
+function useTournamentRegistrations(tournamentId: number | null) {
+  return useQuery({
+    queryKey: ["tournament-registrations", tournamentId],
+    queryFn: () => customFetch<PlayerReg[]>(`/api/tournaments/${tournamentId}/registrations`, { method: "GET" }),
+    enabled: !!tournamentId,
+  });
+}
+function usePostLeaderboard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tournamentId, entries }: { tournamentId: number; entries: Array<{ userId: number; kills: number; placement: number; prize?: number }> }) =>
+      customFetch<any[]>(`/api/tournaments/${tournamentId}/leaderboard`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["tournament-leaderboard", vars.tournamentId] });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+}
 function useCreateTournamentDirect() {
   const qc = useQueryClient();
   return useMutation({
@@ -157,6 +175,8 @@ export default function Admin() {
   const [editForm, setEditForm] = useState({ title: "", description: "", startDateTime: "", mapName: "", gameMode: "", maxSlots: "", status: "", bannerUrl: "" });
   const [roomForm, setRoomForm] = useState({ roomId: "", roomPassword: "" });
   const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
+  const [resultsTournamentId, setResultsTournamentId] = useState<number | null>(null);
+  const [resultRows, setResultRows] = useState<Array<{ userId: number; inGameName: string; kills: number; placement: number; prize: number }>>([]);
   const [upiForm, setUpiForm] = useState({ upiId: "", upiName: "" });
   const [qrPreview, setQrPreview] = useState<string | null>(null);
   const [qrFile, setQrFile] = useState<File | null>(null);
@@ -183,6 +203,8 @@ export default function Admin() {
   const { mutate: updateConfig, isPending: isUpdatingConfig } = useUpdateAdminConfig();
   const { mutate: uploadQr, isPending: isUploadingQr } = useUploadQrCode();
   const { mutate: uploadBanner, isPending: isUploadingBanner } = useUploadBannerImage();
+  const { data: resultsRegistrations, isLoading: resultsRegsLoading } = useTournamentRegistrations(resultsTournamentId);
+  const { mutate: postLeaderboard, isPending: isPostingLeaderboard } = usePostLeaderboard();
 
   // Redirect non-admins after auth loads
   if (!authLoading && !user?.isAdmin) {
@@ -257,6 +279,31 @@ export default function Admin() {
     });
   };
 
+  const handleSelectResultsTournament = (id: number) => {
+    setResultsTournamentId(id);
+    setResultRows([]);
+  };
+
+  const handleInitResultRows = () => {
+    if (!resultsRegistrations) return;
+    const verified = resultsRegistrations.filter(r => r.paymentStatus === "verified" || r.paymentStatus === "free");
+    setResultRows(verified.map(r => ({
+      userId: r.userId,
+      inGameName: r.user?.inGameName || `Player #${r.userId}`,
+      kills: 0,
+      placement: 99,
+      prize: 0,
+    })));
+  };
+
+  const handleSubmitLeaderboard = () => {
+    if (!resultsTournamentId || !resultRows.length) return;
+    postLeaderboard({ tournamentId: resultsTournamentId, entries: resultRows.map(r => ({ userId: r.userId, kills: r.kills, placement: r.placement, prize: r.prize })) }, {
+      onSuccess: () => toast({ title: "Results saved!", description: "Tournament leaderboard updated successfully." }),
+      onError: () => toast({ title: "Failed to save results", variant: "destructive" }),
+    });
+  };
+
   const handleSaveUpi = () => {
     updateConfig({ upiId: upiForm.upiId || adminConfig?.upiId, upiName: upiForm.upiName || adminConfig?.upiName }, {
       onSuccess: () => toast({ title: "Payment config updated!" }),
@@ -315,8 +362,8 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="tournaments" className="w-full">
-        <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-6">
-          {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"],["settings","Settings"]].map(([val, label]) => (
+        <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-7">
+          {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"],["results","Results"],["settings","Settings"]].map(([val, label]) => (
             <TabsTrigger key={val} value={val} className="font-mono uppercase text-xs py-2.5 rounded-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:shadow-none border border-transparent data-[state=active]:border-primary/50">
               {label}
             </TabsTrigger>
@@ -583,6 +630,100 @@ export default function Admin() {
                     </TableBody>
                   </Table>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* RESULTS */}
+        <TabsContent value="results" className="mt-6 space-y-6">
+          <Card className="bg-card/50 border-secondary/30">
+            <CardHeader><CardTitle className="font-display uppercase tracking-wider text-xl text-secondary flex items-center gap-2"><Trophy className="h-5 w-5" /> Post Tournament Results</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label className="font-mono text-xs uppercase text-muted-foreground">Select Tournament</Label>
+                <Select value={resultsTournamentId?.toString() || ""} onValueChange={val => handleSelectResultsTournament(parseInt(val, 10))}>
+                  <SelectTrigger className="bg-background/50 border-border/50 font-mono"><SelectValue placeholder="Pick a tournament to set results..." /></SelectTrigger>
+                  <SelectContent>
+                    {tournamentsData?.tournaments?.map(t => (
+                      <SelectItem key={t.id} value={t.id.toString()}>
+                        <span className={`mr-2 text-xs font-mono ${t.status === "completed" ? "text-muted-foreground" : t.status === "ongoing" ? "text-secondary" : "text-primary"}`}>[{t.status.toUpperCase()}]</span>
+                        {t.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {resultsTournamentId && (
+                <>
+                  {resultsRegsLoading ? (
+                    <div className="h-20 bg-border/20 rounded animate-pulse" />
+                  ) : !resultsRegistrations?.length ? (
+                    <p className="text-center font-mono text-muted-foreground py-4">No registrations for this tournament.</p>
+                  ) : resultRows.length === 0 ? (
+                    <div className="space-y-3">
+                      <div className="bg-background/40 border border-border/30 rounded p-3 font-mono text-xs text-muted-foreground">
+                        <span className="text-foreground font-bold">{resultsRegistrations.filter(r => r.paymentStatus === "verified" || r.paymentStatus === "free").length}</span> eligible players found (verified/free registrations).
+                      </div>
+                      <Button onClick={handleInitResultRows} className="bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">
+                        Load Players &amp; Enter Results
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-xs font-mono text-muted-foreground">Enter each player's stats. Placement 1 = Booyah (wins +12 pts). Points auto-calculated.</p>
+                      <div className="overflow-x-auto">
+                        <Table className="font-mono">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Player</TableHead>
+                              <TableHead className="w-28">Placement</TableHead>
+                              <TableHead className="w-24">Kills</TableHead>
+                              <TableHead className="w-28">Prize (₹)</TableHead>
+                              <TableHead className="text-right w-24">Points</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {resultRows.map((row, i) => {
+                              const pts = (row.placement === 1 ? 12 : 0) + row.kills;
+                              return (
+                                <TableRow key={row.userId}>
+                                  <TableCell className="font-bold">{row.inGameName}</TableCell>
+                                  <TableCell>
+                                    <Select value={row.placement.toString()} onValueChange={val => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, placement: parseInt(val) } : r))}>
+                                      <SelectTrigger className="h-8 bg-background/50 border-border/50 text-xs"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="1">🏆 1st (Booyah)</SelectItem>
+                                        <SelectItem value="2">2nd</SelectItem>
+                                        <SelectItem value="3">3rd</SelectItem>
+                                        {[4,5,6,7,8,9,10,11,12].map(n => <SelectItem key={n} value={n.toString()}>{n}th</SelectItem>)}
+                                        <SelectItem value="99">Not Placed</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input type="number" min="0" value={row.kills} onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, kills: parseInt(e.target.value) || 0 } : r))} className="h-8 bg-background/50 border-border/50 text-xs w-20" />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input type="number" min="0" value={row.prize} onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, prize: parseInt(e.target.value) || 0 } : r))} className="h-8 bg-background/50 border-border/50 text-xs w-24" />
+                                  </TableCell>
+                                  <TableCell className="text-right font-bold text-primary">{pts}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="flex gap-3">
+                        <Button onClick={handleSubmitLeaderboard} disabled={isPostingLeaderboard} className="bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">
+                          {isPostingLeaderboard ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Results & Update Leaderboard"}
+                        </Button>
+                        <Button variant="outline" className="border-border/50" onClick={() => setResultRows([])}>Reset</Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
 import { 
   useGetTournament, getGetTournamentQueryKey, 
@@ -8,14 +8,14 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { format, differenceInSeconds } from "date-fns";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Swords, IndianRupee, Zap, Map, Users, Clock, ShieldAlert, Lock, Unlock, Medal, Target, Plus, Trash2 } from "lucide-react";
+import { Swords, IndianRupee, Zap, Map, Users, Clock, Lock, Unlock, Medal, Target, ChevronLeft, Wallet, AlertTriangle, Crown, Skull } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 type TeamMember = { uid: string; name: string };
@@ -26,6 +26,7 @@ export default function TournamentDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
 
   const { data: tournament, isLoading } = useGetTournament(
     tournamentId,
@@ -39,9 +40,9 @@ export default function TournamentDetail() {
 
   const { mutate: register, isPending: isRegistering } = useRegisterForTournament();
 
-  const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState("");
-  const [transactionId, setTransactionId] = useState("");
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [isInsufficientOpen, setIsInsufficientOpen] = useState(false);
+  const [insufficientData, setInsufficientData] = useState<{ required: number; balance: number } | null>(null);
   const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
 
   // Dynamic team members for duo/squad
@@ -75,10 +76,6 @@ export default function TournamentDetail() {
       toast({ title: "Login required", description: "You must be logged in to register.", variant: "destructive" });
       return;
     }
-    if (tournament?.entryFee && tournament.entryFee > 0 && !transactionId) {
-      toast({ title: "Payment details required", description: "Please provide a transaction ID.", variant: "destructive" });
-      return;
-    }
     // Validate team members
     const invalidMember = teamMembers.find(m => !m.uid.trim() || !m.name.trim());
     if (invalidMember) {
@@ -87,14 +84,25 @@ export default function TournamentDetail() {
     }
 
     register(
-      { id: tournamentId, data: { paymentScreenshotUrl, transactionId, teamMembers: teamMembers.length > 0 ? teamMembers : undefined } },
+      { id: tournamentId, data: { teamMembers: teamMembers.length > 0 ? teamMembers : undefined } },
       {
         onSuccess: () => {
-          toast({ title: "Registered Successfully!", description: tournament?.entryFee === 0 ? "You're in! Check 'My Matches' for room details." : "Your registration is pending verification." });
+          toast({ title: "Registered Successfully!", description: tournament?.entryFee === 0 ? "You're in! Check 'My Matches' for room details." : `₹${tournament?.entryFee} deducted from your wallet. You're in!` });
           setIsRegisterOpen(false);
           queryClient.invalidateQueries({ queryKey: getGetTournamentQueryKey(tournamentId) });
         },
-        onError: (err) => toast({ title: "Registration failed", description: (err as any)?.error?.message || "An error occurred", variant: "destructive" })
+        onError: (err: any) => {
+          const errData = err?.data || err;
+          if (errData?.code === "INSUFFICIENT_BALANCE" || err?.status === 402) {
+            const required = errData?.required ?? tournament?.entryFee ?? 0;
+            const balance = errData?.balance ?? 0;
+            setInsufficientData({ required, balance });
+            setIsRegisterOpen(false);
+            setIsInsufficientOpen(true);
+          } else {
+            toast({ title: "Registration failed", description: errData?.error || errData?.message || "An error occurred", variant: "destructive" });
+          }
+        }
       }
     );
   };
@@ -102,6 +110,7 @@ export default function TournamentDetail() {
   if (isLoading) {
     return (
       <div className="space-y-6">
+        <div className="h-8 w-32 bg-card animate-pulse rounded" />
         <div className="h-64 bg-card animate-pulse rounded-xl" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[1,2,3].map(i => <div key={i} className="h-24 bg-card animate-pulse rounded-xl" />)}
@@ -113,13 +122,20 @@ export default function TournamentDetail() {
   if (!tournament) return <div className="text-center py-20 font-mono text-muted-foreground">Tournament not found.</div>;
 
   const isFull = tournament.filledSlots >= tournament.maxSlots;
-  const canRegister = !tournament.isRegistered && tournament.status === "upcoming" && !isFull && user;
+  const canRegister = !tournament.isRegistered && tournament.status === "upcoming" && !isFull && !!user;
   const showRoom = (tournament.isRegistered && (tournament.registrationStatus === "verified" || tournament.registrationStatus === "free")) && (tournament.roomId || tournament.roomPassword);
 
   const modeLabel: Record<string, string> = { solo: "Solo", duo: "Duo", squad: "Squad (4 Players)" };
+  const walletBalance = (user as any)?.walletBalance ?? 0;
+  const canAfford = walletBalance >= (tournament.entryFee ?? 0);
 
   return (
     <div className="space-y-8 pb-12">
+      {/* Back button */}
+      <Button variant="ghost" className="font-mono text-muted-foreground hover:text-foreground -ml-2 gap-1" onClick={() => navigate("/tournaments")}>
+        <ChevronLeft className="h-4 w-4" /> Back to Tournaments
+      </Button>
+
       {/* Banner */}
       <div className="relative h-56 md:h-72 rounded-xl overflow-hidden border border-primary/20">
         <img
@@ -250,22 +266,26 @@ export default function TournamentDetail() {
                     </div>
                   )}
 
-                  {/* Payment */}
+                  {/* Payment info */}
                   {tournament.entryFee > 0 ? (
-                    <div className="space-y-4 border-t border-border/30 pt-4">
-                      <div className="bg-primary/5 border border-primary/20 rounded p-4 font-mono text-sm">
-                        <p className="text-primary font-bold mb-2">Entry Fee: ₹{tournament.entryFee}</p>
-                        <p>UPI ID: <span className="text-foreground">ffarena@upi</span></p>
-                        <p className="text-muted-foreground text-xs mt-1">Pay and enter your transaction details below.</p>
+                    <div className={`border rounded p-4 font-mono text-sm space-y-2 ${canAfford ? "bg-primary/5 border-primary/20" : "bg-destructive/5 border-destructive/30"}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Entry Fee</span>
+                        <span className="font-bold text-primary">₹{tournament.entryFee}</span>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="font-mono text-xs uppercase text-muted-foreground">Transaction ID *</Label>
-                        <Input value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="UPI Transaction ID" className="bg-background/50 border-border/50 font-mono" />
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Your Wallet</span>
+                        <span className={`font-bold ${canAfford ? "text-secondary" : "text-destructive"}`}>₹{walletBalance}</span>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="font-mono text-xs uppercase text-muted-foreground">Screenshot URL (optional)</Label>
-                        <Input value={paymentScreenshotUrl} onChange={e => setPaymentScreenshotUrl(e.target.value)} placeholder="https://..." className="bg-background/50 border-border/50 font-mono" />
-                      </div>
+                      {canAfford ? (
+                        <div className="text-xs text-muted-foreground pt-1 border-t border-border/30">
+                          ✓ ₹{tournament.entryFee} will be deducted from your wallet instantly upon joining.
+                        </div>
+                      ) : (
+                        <div className="text-xs text-destructive pt-1 border-t border-destructive/20 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Insufficient balance. You need ₹{tournament.entryFee - walletBalance} more.
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-secondary/10 border border-secondary/30 rounded p-3 font-mono text-sm text-secondary">
@@ -273,9 +293,15 @@ export default function TournamentDetail() {
                     </div>
                   )}
 
-                  <Button onClick={handleRegister} disabled={isRegistering} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest">
-                    {isRegistering ? "Registering..." : "Confirm Registration"}
-                  </Button>
+                  {canAfford || tournament.entryFee === 0 ? (
+                    <Button onClick={handleRegister} disabled={isRegistering} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest">
+                      {isRegistering ? "Registering..." : tournament.entryFee > 0 ? `Confirm & Pay ₹${tournament.entryFee}` : "Confirm Registration"}
+                    </Button>
+                  ) : (
+                    <Button onClick={() => { setIsRegisterOpen(false); navigate("/wallet"); }} className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">
+                      <Wallet className="h-4 w-4 mr-2" /> Deposit to Join
+                    </Button>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
@@ -289,6 +315,31 @@ export default function TournamentDetail() {
         )}
       </div>
 
+      {/* Insufficient Balance Dialog */}
+      <Dialog open={isInsufficientOpen} onOpenChange={setIsInsufficientOpen}>
+        <DialogContent className="bg-card border-destructive/40 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-display uppercase tracking-wider text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Deposit Required
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2 font-mono text-sm">
+            <div className="bg-destructive/5 border border-destructive/20 rounded p-4 space-y-2">
+              <div className="flex justify-between"><span className="text-muted-foreground">Required</span><span className="font-bold text-destructive">₹{insufficientData?.required}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Your Balance</span><span className="font-bold">₹{insufficientData?.balance}</span></div>
+              <div className="flex justify-between border-t border-border/30 pt-2"><span className="text-muted-foreground">Shortfall</span><span className="font-bold text-yellow-500">₹{(insufficientData?.required ?? 0) - (insufficientData?.balance ?? 0)}</span></div>
+            </div>
+            <p className="text-muted-foreground text-xs">Add money to your FF Arena wallet to join this tournament. Deposits are approved within a few minutes.</p>
+            <div className="flex gap-3">
+              <Button onClick={() => navigate("/wallet")} className="flex-1 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">
+                <Wallet className="h-4 w-4 mr-2" /> Go to Wallet
+              </Button>
+              <Button variant="outline" className="border-border/50" onClick={() => setIsInsufficientOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {tournament.description && (
         <Card className="bg-card/30 border-border/30">
           <CardContent className="p-5">
@@ -297,30 +348,52 @@ export default function TournamentDetail() {
         </Card>
       )}
 
-      {/* Leaderboard (completed) */}
+      {/* Results (completed) */}
       {tournament.status === "completed" && (
         <Card className="bg-card/50 border-secondary/20">
-          <CardHeader><CardTitle className="font-display uppercase tracking-wider text-secondary flex items-center gap-2"><Trophy className="h-5 w-5" /> Final Results</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="font-display uppercase tracking-wider text-secondary flex items-center gap-2">
+              <Crown className="h-5 w-5" /> Final Results
+            </CardTitle>
+          </CardHeader>
           <CardContent>
             {isLoadingLeaderboard ? (
               <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-border/20 rounded animate-pulse" />)}</div>
-            ) : !leaderboard?.entries?.length ? (
+            ) : !leaderboard?.length && !(leaderboard as any)?.entries?.length ? (
               <p className="text-center font-mono text-muted-foreground py-6">Results not posted yet.</p>
             ) : (
               <Table className="font-mono">
                 <TableHeader>
-                  <TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead className="text-right">Kills</TableHead><TableHead className="text-right">Points</TableHead><TableHead className="text-right">Prize</TableHead></TableRow>
+                  <TableRow>
+                    <TableHead>Rank</TableHead>
+                    <TableHead>Player</TableHead>
+                    <TableHead className="text-center">Result</TableHead>
+                    <TableHead className="text-right">Kills</TableHead>
+                    <TableHead className="text-right">Points</TableHead>
+                    <TableHead className="text-right">Prize</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaderboard.entries.map((entry: any) => (
-                    <TableRow key={entry.id}>
+                  {((leaderboard as any)?.entries || leaderboard as any[])?.map((entry: any) => (
+                    <TableRow key={entry.id} className={entry.placement === 1 ? "bg-secondary/5" : ""}>
                       <TableCell className="font-bold">
-                        {entry.rank === 1 ? <Medal className="h-5 w-5 text-secondary" /> : entry.rank === 2 ? <Medal className="h-5 w-5 text-zinc-300" /> : entry.rank === 3 ? <Medal className="h-5 w-5 text-amber-600" /> : `#${entry.rank}`}
+                        {entry.rank === 1 ? <Medal className="h-5 w-5 text-yellow-400" /> : entry.rank === 2 ? <Medal className="h-5 w-5 text-zinc-300" /> : entry.rank === 3 ? <Medal className="h-5 w-5 text-amber-600" /> : <span className="text-muted-foreground">#{entry.rank}</span>}
                       </TableCell>
                       <TableCell className="font-bold">{entry.user?.inGameName ?? "—"}</TableCell>
-                      <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Target className="h-3 w-3 text-primary" />{entry.kills}</div></TableCell>
-                      <TableCell className="text-right font-bold text-primary">{entry.points}</TableCell>
-                      <TableCell className="text-right text-secondary font-bold">{entry.prizeWon > 0 ? `₹${entry.prizeWon}` : "—"}</TableCell>
+                      <TableCell className="text-center">
+                        {entry.placement === 1 ? (
+                          <span className="text-xs font-mono font-bold text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 px-2 py-0.5 rounded">🏆 BOOYAH!</span>
+                        ) : (
+                          <span className="text-xs font-mono text-muted-foreground">#{entry.placement}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Skull className="h-3 w-3 text-destructive" />{entry.kills}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-primary">{entry.totalPoints ?? entry.points ?? 0}</TableCell>
+                      <TableCell className="text-right text-secondary font-bold">{(entry.prize ?? entry.prizeWon) > 0 ? `₹${entry.prize ?? entry.prizeWon}` : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

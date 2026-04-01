@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, tournamentsTable, registrationsTable, usersTable, notificationsTable } from "@workspace/db";
+import { db, tournamentsTable, registrationsTable, usersTable, notificationsTable, transactionsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 
@@ -54,23 +54,69 @@ router.post("/tournaments/:id/register", requireAuth, async (req, res): Promise<
     return;
   }
 
-  const { paymentScreenshotUrl, transactionId } = req.body;
+  const { teamMembers } = req.body;
 
-  const paymentStatus = tournament.entryFee === 0 ? "free" : "pending";
+  // Paid tournament: deduct from wallet
+  if (tournament.entryFee > 0) {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
 
-  const [registration] = await db.insert(registrationsTable).values({
-    tournamentId: id,
-    userId: req.session.userId!,
-    paymentStatus,
-    paymentScreenshotUrl: paymentScreenshotUrl ?? null,
-    transactionId: transactionId ?? null,
-  }).returning();
+    if (user.walletBalance < tournament.entryFee) {
+      res.status(402).json({
+        error: "Insufficient wallet balance",
+        code: "INSUFFICIENT_BALANCE",
+        required: tournament.entryFee,
+        balance: user.walletBalance,
+      });
+      return;
+    }
 
-  if (tournament.entryFee === 0) {
+    // Deduct entry fee from wallet
+    await db.update(usersTable)
+      .set({ walletBalance: user.walletBalance - tournament.entryFee })
+      .where(eq(usersTable.id, req.session.userId!));
+
+    // Record transaction
+    await db.insert(transactionsTable).values({
+      userId: req.session.userId!,
+      type: "withdrawal",
+      amount: tournament.entryFee,
+      status: "completed",
+      description: `Entry fee for tournament: ${tournament.title}`,
+    });
+
+    // Create registration as verified (wallet payment = instant verification)
+    const [registration] = await db.insert(registrationsTable).values({
+      tournamentId: id,
+      userId: req.session.userId!,
+      paymentStatus: "verified",
+      teamMembers: teamMembers ?? null,
+    }).returning();
+
+    // Increment filled slots
     await db.update(tournamentsTable)
       .set({ filledSlots: tournament.filledSlots + 1 })
       .where(eq(tournamentsTable.id, id));
+
+    const result = await buildRegistration(registration);
+    res.status(201).json(result);
+    return;
   }
+
+  // Free tournament
+  const [registration] = await db.insert(registrationsTable).values({
+    tournamentId: id,
+    userId: req.session.userId!,
+    paymentStatus: "free",
+    teamMembers: teamMembers ?? null,
+  }).returning();
+
+  await db.update(tournamentsTable)
+    .set({ filledSlots: tournament.filledSlots + 1 })
+    .where(eq(tournamentsTable.id, id));
 
   const result = await buildRegistration(registration);
   res.status(201).json(result);
