@@ -16,7 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     logout.mutate(undefined, {
       onSuccess: () => {
         queryClient.clear();
-        setLocation("/login");
+        setLocation("/");
       }
     });
   };

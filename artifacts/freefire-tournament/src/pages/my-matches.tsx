@@ -35,17 +35,18 @@ type MatchEntry = {
   } | null;
 };
 
-function useMyMatches() {
+function useMyMatches(enabled: boolean) {
   return useQuery({
     queryKey: ["my-matches"],
     queryFn: () => customFetch<{ matches: MatchEntry[] }>("/api/my-matches", { method: "GET" }),
+    enabled,
   });
 }
 
 export default function MyMatches() {
   const { isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const { data, isLoading: matchesLoading } = useMyMatches();
+  const { data, isLoading: matchesLoading } = useMyMatches(isAuthenticated);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) setLocation("/login");

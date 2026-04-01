@@ -22,10 +22,11 @@ type Transaction = {
   createdAt: string;
 };
 
-function useWallet() {
+function useWallet(enabled: boolean) {
   return useQuery({
     queryKey: ["wallet"],
     queryFn: () => customFetch<{ walletBalance: number; transactions: Transaction[] }>("/api/wallet", { method: "GET" }),
+    enabled,
   });
 }
 
@@ -59,7 +60,7 @@ export default function WalletPage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [upiId, setUpiId] = useState("");
 
-  const { data: wallet, isLoading: walletLoading } = useWallet();
+  const { data: wallet, isLoading: walletLoading } = useWallet(isAuthenticated);
   const deposit = useDeposit();
   const withdraw = useWithdraw();
 
