@@ -167,6 +167,14 @@ type LeaderboardEntry = {
   totalPoints: number; totalKills: number; matchesPlayed: number; totalEarnings: number;
 };
 
+function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => customFetch(`/api/admin/users/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-users"] }); qc.invalidateQueries({ queryKey: ["admin-stats"] }); qc.invalidateQueries({ queryKey: ["admin-leaderboard"] }); },
+  });
+}
+
 function useAdminLeaderboard(enabled = true) {
   return useQuery<LeaderboardEntry[]>({
     queryKey: ["admin-leaderboard"],
@@ -238,6 +246,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState("tournaments");
   const [lbEditRow, setLbEditRow] = useState<{ userId: number; matchesPlayed: string; totalEarnings: string; globalRank: string } | null>(null);
   const [lbRemoveUserId, setLbRemoveUserId] = useState<number | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<UserEntry | null>(null);
   const [resultsTournamentId, setResultsTournamentId] = useState<number | null>(null);
   const [resultRows, setResultRows] = useState<Array<{ userId: number; inGameName: string; kills: number; placement: number; prize: number }>>([]);
   const [playerDetailUser, setPlayerDetailUser] = useState<UserEntry | null>(null);
@@ -275,6 +284,7 @@ export default function Admin() {
   const { data: adminLeaderboard, isLoading: lbLoading } = useAdminLeaderboard(!!user?.isAdmin);
   const { mutate: updateLbPlayer, isPending: isUpdatingLb } = useUpdateLeaderboardPlayer();
   const { mutate: removeFromLb, isPending: isRemovingLb } = useRemoveFromLeaderboard();
+  const { mutate: deleteUser, isPending: isDeletingUser } = useDeleteUser();
   const deleteTournamentRef = { current: deleteTournament };
   const { mutate: deleteTournamentMutate, isPending: isDeleting } = useMutation({
     mutationFn: (id: number) => customFetch(`/api/tournaments/${id}`, { method: "DELETE" }),
@@ -678,6 +688,9 @@ export default function Admin() {
                               </Button>
                               <Button size="sm" variant="outline" className={`h-8 px-3 text-xs font-mono ${u.isBanned ? "border-secondary/50 text-secondary hover:bg-secondary/10" : "border-destructive/50 text-destructive hover:bg-destructive/10"}`} onClick={() => handleBan(u.id)}>
                                 <Ban className="h-3 w-3 mr-1" /> {u.isBanned ? "Unban" : "Ban"}
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-8 px-3 text-xs font-mono border-red-700/60 text-red-500 hover:bg-red-900/20" onClick={() => setDeleteUserTarget(u)}>
+                                <Trash2 className="h-3 w-3 mr-1" /> Delete
                               </Button>
                             </div>
                           </TableCell>
@@ -1146,6 +1159,34 @@ export default function Admin() {
             <div className="flex gap-3 pt-2">
               <Button variant="outline" className="flex-1 border-border/50" onClick={() => setEditTournament(null)}>Cancel</Button>
               <Button onClick={handleEditSave} disabled={isUpdating} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest">{isUpdating ? "Saving..." : "Save Changes"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanently Delete User Dialog */}
+      <Dialog open={!!deleteUserTarget} onOpenChange={open => !open && setDeleteUserTarget(null)}>
+        <DialogContent className="bg-card border-red-700/50 max-w-sm">
+          <DialogHeader><DialogTitle className="font-display uppercase tracking-wider text-red-500 flex items-center gap-2"><AlertTriangle className="h-5 w-5" /> Permanently Delete Player</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            {deleteUserTarget && (
+              <div className="bg-red-950/30 border border-red-700/30 rounded p-3 space-y-1">
+                <p className="font-bold font-display uppercase text-sm">{deleteUserTarget.inGameName}</p>
+                <p className="text-xs font-mono text-muted-foreground">{deleteUserTarget.email} · UID: {deleteUserTarget.freeFireUid || "N/A"}</p>
+                <p className="text-xs font-mono text-muted-foreground">Wallet: ₹{deleteUserTarget.walletBalance} · Earnings: ₹{deleteUserTarget.totalEarnings}</p>
+              </div>
+            )}
+            <p className="text-sm font-mono text-muted-foreground">This will <span className="text-red-400 font-bold">permanently erase</span> the player and all their data — registrations, transactions, leaderboard entries. This cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 border-border/50" onClick={() => setDeleteUserTarget(null)}>Cancel</Button>
+              <Button
+                disabled={isDeletingUser}
+                onClick={() => deleteUserTarget && deleteUser(deleteUserTarget.id, {
+                  onSuccess: () => { toast({ title: "Player deleted", description: `${deleteUserTarget.inGameName} has been permanently removed.` }); setDeleteUserTarget(null); },
+                  onError: (err: any) => toast({ title: "Delete failed", description: err?.data?.error || "Could not delete player", variant: "destructive" }),
+                })}
+                className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold uppercase tracking-widest"
+              >{isDeletingUser ? "Deleting..." : "Delete Forever"}</Button>
             </div>
           </div>
         </DialogContent>

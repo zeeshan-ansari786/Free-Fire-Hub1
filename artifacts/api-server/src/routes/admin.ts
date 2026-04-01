@@ -79,6 +79,24 @@ router.post("/admin/users/:id/ban", requireAdmin, async (req, res): Promise<void
   res.json({ isBanned: newBanStatus, message: newBanStatus ? "User banned" : "User unbanned" });
 });
 
+// Permanently delete a user and all their data
+router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  if (user.isAdmin) { res.status(403).json({ error: "Cannot delete admin accounts" }); return; }
+
+  await db.delete(leaderboardTable).where(eq(leaderboardTable.userId, id));
+  await db.delete(registrationsTable).where(eq(registrationsTable.userId, id));
+  await db.delete(transactionsTable).where(eq(transactionsTable.userId, id));
+  await db.delete(reportsTable).where(eq(reportsTable.reportedUserId, id));
+  await db.delete(usersTable).where(eq(usersTable.id, id));
+
+  res.json({ message: "User permanently deleted" });
+});
+
 // Financial overview - deposits, withdrawals
 router.get("/admin/financial", requireAdmin, async (req, res): Promise<void> => {
   const [deposits, withdrawals, pendingWithdrawals, pendingDeposits] = await Promise.all([

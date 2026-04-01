@@ -13,6 +13,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId));
+  if (!user) {
+    req.session.destroy(() => {});
+    res.status(401).json({ error: "User not found" });
+    return;
+  }
+
+  if (user.isBanned) {
+    req.session.destroy(() => {});
+    res.status(403).json({ error: "Your account has been banned. Contact support for help.", code: "BANNED" });
+    return;
+  }
+
   next();
 }
 
