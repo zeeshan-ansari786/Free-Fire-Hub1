@@ -10,8 +10,17 @@ function formatUser(user: typeof usersTable.$inferSelect) {
   return safeUser;
 }
 
-const BOOYAH_POINTS = 12;
 const KILL_POINTS = 1;
+
+function getRankPoints(placement: number): number {
+  if (placement === 1) return 12;
+  if (placement === 2) return 8;
+  if (placement === 3) return 6;
+  if (placement <= 6) return 4;
+  if (placement <= 10) return 2;
+  if (placement <= 15) return 1;
+  return 0;
+}
 
 router.get("/tournaments/:id/leaderboard", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -54,12 +63,12 @@ router.post("/tournaments/:id/leaderboard", requireAdmin, async (req, res): Prom
   // Delete existing leaderboard for this tournament
   await db.delete(leaderboardTable).where(eq(leaderboardTable.tournamentId, id));
 
-  // Calculate points: 12pts for Booyah (1st place), 1pt per kill
+  // Calculate points: rank bonus (12/8/6/4/2/1 by placement) + 1pt per kill
   const sorted = entries
-    .map((entry, idx) => {
-      const placementPts = entry.placement === 1 ? BOOYAH_POINTS : 0;
-      const totalPoints = placementPts + (entry.kills * KILL_POINTS);
-      return { ...entry, totalPoints };
+    .map((entry) => {
+      const rankPts = getRankPoints(entry.placement);
+      const totalPoints = rankPts + (entry.kills * KILL_POINTS);
+      return { ...entry, rankPoints: rankPts, totalPoints };
     })
     .sort((a, b) => b.totalPoints - a.totalPoints);
 

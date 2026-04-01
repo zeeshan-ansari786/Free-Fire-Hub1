@@ -164,6 +164,23 @@ function useCreateTournamentDirect() {
 const statusColor: Record<string, string> = { upcoming: "text-primary border-primary/30", ongoing: "text-secondary border-secondary/30", completed: "text-muted-foreground border-border" };
 const payStatusColor: Record<string, string> = { verified: "text-secondary", free: "text-secondary", pending: "text-yellow-500", rejected: "text-destructive" };
 
+function getRankPoints(placement: number): number {
+  if (placement === 1) return 12;
+  if (placement === 2) return 8;
+  if (placement === 3) return 6;
+  if (placement <= 6) return 4;
+  if (placement <= 10) return 2;
+  if (placement <= 15) return 1;
+  return 0;
+}
+
+function getAutoPrize(placement: number, prizePool: number): number {
+  if (placement === 1) return Math.floor(prizePool * 0.50);
+  if (placement === 2) return Math.floor(prizePool * 0.30);
+  if (placement === 3) return Math.floor(prizePool * 0.15);
+  return 0;
+}
+
 export default function Admin() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -314,14 +331,16 @@ export default function Admin() {
 
   const handleInitResultRows = () => {
     if (!resultsRegistrations) return;
+    const selectedTournament = tournamentsData?.tournaments?.find(t => t.id === resultsTournamentId);
+    const prizePool = selectedTournament?.prizePool ?? 0;
     const verified = resultsRegistrations.filter(r => r.paymentStatus === "verified" || r.paymentStatus === "free");
-    setResultRows(verified.map(r => ({
-      userId: r.userId,
-      inGameName: r.user?.inGameName || `Player #${r.userId}`,
-      kills: 0,
-      placement: 99,
-      prize: 0,
-    })));
+    setResultRows(verified.map(r => {
+      // Use the playing IGN given at registration time (self entry in teamMembers)
+      const selfEntry = (r.teamMembers as any[])?.find((m: any) => m.self);
+      const displayName = selfEntry?.name || r.user?.inGameName || `Player #${r.userId}`;
+      return { userId: r.userId, inGameName: displayName, kills: 0, placement: 99, prize: 0 };
+    }));
+    void prizePool; // will be used in placement change handler
   };
 
   const handleSubmitLeaderboard = () => {
@@ -705,43 +724,81 @@ export default function Admin() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <p className="text-xs font-mono text-muted-foreground">Enter placement (1 = 🏆 Booyah, +12 pts). Leave blank = not placed. Points = placement bonus + kills.</p>
+                      {/* Points reference */}
+                      <div className="bg-background/40 border border-border/30 rounded p-3 font-mono text-xs text-muted-foreground flex flex-wrap gap-3">
+                        <span className="text-foreground font-bold">Rank Pts:</span>
+                        <span>🏆 1st=12</span><span>2nd=8</span><span>3rd=6</span><span>4th-6th=4</span><span>7th-10th=2</span><span>11th-15th=1</span>
+                        <span className="ml-2 text-foreground font-bold">+</span>
+                        <span>1 pt/kill</span>
+                        {(() => { const t = tournamentsData?.tournaments?.find(x => x.id === resultsTournamentId); return t?.prizePool ? <span className="ml-2 text-secondary font-bold">Prize pool: ₹{t.prizePool} (auto: 50%/30%/15%)</span> : null; })()}
+                      </div>
                       <div className="overflow-x-auto">
                         <Table className="font-mono">
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Player</TableHead>
-                              <TableHead className="w-28">Placement</TableHead>
-                              <TableHead className="w-24">Kills</TableHead>
+                              <TableHead>Player (Reg. IGN)</TableHead>
+                              <TableHead className="w-24">Place</TableHead>
+                              <TableHead className="w-20">Kills</TableHead>
+                              <TableHead className="text-center w-24">Rank Pts</TableHead>
+                              <TableHead className="text-center w-24">Kill Pts</TableHead>
+                              <TableHead className="text-center w-24">Total</TableHead>
                               <TableHead className="w-28">Prize (₹)</TableHead>
-                              <TableHead className="text-right w-24">Points</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {resultRows.map((row, i) => {
-                              const pts = (row.placement === 1 ? 12 : 0) + row.kills;
+                              const rankPts = getRankPoints(row.placement);
+                              const killPts = row.kills;
+                              const total = rankPts + killPts;
+                              const selectedTournament = tournamentsData?.tournaments?.find(t => t.id === resultsTournamentId);
+                              const prizePool = selectedTournament?.prizePool ?? 0;
                               return (
-                                <TableRow key={row.userId}>
-                                  <TableCell className="font-bold">{row.inGameName}</TableCell>
+                                <TableRow key={row.userId} className={row.placement === 1 ? "bg-yellow-500/5" : row.placement === 2 ? "bg-zinc-400/5" : row.placement === 3 ? "bg-amber-600/5" : ""}>
                                   <TableCell>
-                                    <div className="flex items-center gap-1 w-28">
-                                      <Input
-                                        type="number" min="1" max="99"
-                                        value={row.placement === 99 ? "" : row.placement}
-                                        onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, placement: parseInt(e.target.value) || 99 } : r))}
-                                        placeholder="—"
-                                        className="h-8 bg-background/50 border-border/50 text-xs w-16"
-                                      />
-                                      {row.placement === 1 && <span className="text-xs">🏆</span>}
-                                    </div>
+                                    <div className="font-bold">{row.inGameName}</div>
+                                    {row.placement === 1 && <div className="text-xs text-yellow-500">🏆 BOOYAH!</div>}
+                                    {row.placement === 2 && <div className="text-xs text-zinc-400">🥈 2nd Place</div>}
+                                    {row.placement === 3 && <div className="text-xs text-amber-600">🥉 3rd Place</div>}
                                   </TableCell>
                                   <TableCell>
-                                    <Input type="number" min="0" value={row.kills} onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, kills: parseInt(e.target.value) || 0 } : r))} className="h-8 bg-background/50 border-border/50 text-xs w-20" />
+                                    <Input
+                                      type="number" min="1" max="99"
+                                      value={row.placement === 99 ? "" : row.placement}
+                                      onChange={e => {
+                                        const p = parseInt(e.target.value) || 99;
+                                        setResultRows(prev => prev.map((r, idx) => idx === i ? {
+                                          ...r,
+                                          placement: p,
+                                          prize: r.prize === 0 || r.prize === getAutoPrize(r.placement, prizePool)
+                                            ? getAutoPrize(p, prizePool)
+                                            : r.prize,
+                                        } : r));
+                                      }}
+                                      placeholder="—"
+                                      className="h-8 bg-background/50 border-border/50 text-xs w-16"
+                                    />
                                   </TableCell>
                                   <TableCell>
-                                    <Input type="number" min="0" value={row.prize} onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, prize: parseInt(e.target.value) || 0 } : r))} className="h-8 bg-background/50 border-border/50 text-xs w-24" />
+                                    <Input type="number" min="0" value={row.kills}
+                                      onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, kills: parseInt(e.target.value) || 0 } : r))}
+                                      className="h-8 bg-background/50 border-border/50 text-xs w-16" />
                                   </TableCell>
-                                  <TableCell className="text-right font-bold text-primary">{pts}</TableCell>
+                                  <TableCell className="text-center">
+                                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border ${rankPts > 0 ? "text-secondary border-secondary/30 bg-secondary/10" : "text-muted-foreground border-border/30"}`}>
+                                      {rankPts} pts
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span className="inline-block px-2 py-0.5 rounded text-xs font-bold border text-blue-400 border-blue-400/30 bg-blue-400/10">
+                                      {killPts} pts
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-center font-bold text-primary text-base">{total}</TableCell>
+                                  <TableCell>
+                                    <Input type="number" min="0" value={row.prize}
+                                      onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, prize: parseInt(e.target.value) || 0 } : r))}
+                                      className="h-8 bg-background/50 border-border/50 text-xs w-24" />
+                                  </TableCell>
                                 </TableRow>
                               );
                             })}
