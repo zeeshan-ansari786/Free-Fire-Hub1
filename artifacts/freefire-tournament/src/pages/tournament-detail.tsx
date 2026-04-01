@@ -121,7 +121,7 @@ export default function TournamentDetail() {
       { id: tournamentId, data: { teamMembers: allMembers } },
       {
         onSuccess: () => {
-          toast({ title: "Registered Successfully!", description: tournament?.entryFee === 0 ? "You're in! Check 'My Matches' for room details." : `₹${tournament?.entryFee} deducted from your wallet. You're in!` });
+          toast({ title: "Registered Successfully!", description: payableAmount === 0 ? "You're in! Check 'My Matches' for room details." : `₹${payableAmount} deducted from your wallet. You're in!` });
           setIsRegisterOpen(false);
           queryClient.invalidateQueries({ queryKey: getGetTournamentQueryKey(tournamentId) });
         },
@@ -161,7 +161,11 @@ export default function TournamentDetail() {
 
   const modeLabel: Record<string, string> = { solo: "Solo", duo: "Duo", squad: "Squad (4 Players)" };
   const walletBalance = (user as any)?.walletBalance ?? 0;
-  const canAfford = walletBalance >= (tournament.entryFee ?? 0);
+
+  // Team-size multiplier: solo×1, duo×2, squad×4
+  const teamMultiplier = tournament.gameMode === "squad" ? 4 : tournament.gameMode === "duo" ? 2 : 1;
+  const payableAmount = (tournament.entryFee ?? 0) * teamMultiplier;
+  const canAfford = walletBalance >= payableAmount;
 
   return (
     <div className="space-y-8 pb-12">
@@ -201,6 +205,9 @@ export default function TournamentDetail() {
           <IndianRupee className="h-5 w-5 text-secondary mb-1" />
           <p className="text-xs font-mono text-muted-foreground">Entry Fee</p>
           <p className="text-xl font-bold font-display text-secondary">{tournament.entryFee === 0 ? "FREE" : `₹${tournament.entryFee}`}</p>
+          {tournament.entryFee > 0 && teamMultiplier > 1 && (
+            <p className="text-xs font-mono text-muted-foreground mt-0.5">Total: ₹{payableAmount} ({modeLabel[tournament.gameMode]})</p>
+          )}
         </CardContent></Card>
         <Card className="bg-card/50 border-border/30"><CardContent className="p-4">
           <Users className="h-5 w-5 text-foreground mb-1" />
@@ -332,8 +339,18 @@ export default function TournamentDetail() {
                   {tournament.entryFee > 0 ? (
                     <div className={`border rounded p-4 font-mono text-sm space-y-2 ${canAfford ? "bg-primary/5 border-primary/20" : "bg-destructive/5 border-destructive/30"}`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Entry Fee</span>
-                        <span className="font-bold text-primary">₹{tournament.entryFee}</span>
+                        <span className="text-muted-foreground">Fee per player</span>
+                        <span className="font-bold">₹{tournament.entryFee}</span>
+                      </div>
+                      {teamMultiplier > 1 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Team size ({modeLabel[tournament.gameMode]})</span>
+                          <span className="text-muted-foreground">× {teamMultiplier}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between border-t border-border/30 pt-2">
+                        <span className="text-muted-foreground font-bold">Total Payable</span>
+                        <span className="font-bold text-primary text-base">₹{payableAmount}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Your Wallet</span>
@@ -341,11 +358,11 @@ export default function TournamentDetail() {
                       </div>
                       {canAfford ? (
                         <div className="text-xs text-muted-foreground pt-1 border-t border-border/30">
-                          ✓ ₹{tournament.entryFee} will be deducted from your wallet instantly upon joining.
+                          ✓ ₹{payableAmount} will be deducted from your wallet instantly upon joining.
                         </div>
                       ) : (
                         <div className="text-xs text-destructive pt-1 border-t border-destructive/20 flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> Insufficient balance. You need ₹{tournament.entryFee - walletBalance} more.
+                          <AlertTriangle className="h-3 w-3" /> Insufficient balance. You need ₹{payableAmount - walletBalance} more.
                         </div>
                       )}
                     </div>
@@ -355,9 +372,9 @@ export default function TournamentDetail() {
                     </div>
                   )}
 
-                  {canAfford || tournament.entryFee === 0 ? (
+                  {canAfford || payableAmount === 0 ? (
                     <Button onClick={handleRegister} disabled={isRegistering} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest">
-                      {isRegistering ? "Registering..." : tournament.entryFee > 0 ? `Confirm & Pay ₹${tournament.entryFee}` : "Confirm Registration"}
+                      {isRegistering ? "Registering..." : payableAmount > 0 ? `Confirm & Pay ₹${payableAmount}` : "Confirm Registration"}
                     </Button>
                   ) : (
                     <Button onClick={() => { setIsRegisterOpen(false); navigate("/wallet"); }} className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">

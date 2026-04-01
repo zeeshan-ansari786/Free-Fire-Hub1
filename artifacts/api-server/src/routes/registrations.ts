@@ -16,6 +16,12 @@ async function buildRegistration(reg: typeof registrationsTable.$inferSelect) {
   return { ...reg, user: formatUser(user!), tournament: tournament! };
 }
 
+function getTeamMultiplier(gameMode: string): number {
+  if (gameMode === "duo") return 2;
+  if (gameMode === "squad") return 4;
+  return 1; // solo or any other mode
+}
+
 router.post("/tournaments/:id/register", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -56,36 +62,40 @@ router.post("/tournaments/:id/register", requireAuth, async (req, res): Promise<
 
   const { teamMembers } = req.body;
 
+  // Calculate actual charge based on game mode team size
+  const multiplier = getTeamMultiplier(tournament.gameMode);
+  const chargeAmount = tournament.entryFee * multiplier;
+
   // Paid tournament: deduct from wallet
-  if (tournament.entryFee > 0) {
+  if (chargeAmount > 0) {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
 
-    if (user.walletBalance < tournament.entryFee) {
+    if (user.walletBalance < chargeAmount) {
       res.status(402).json({
         error: "Insufficient wallet balance",
         code: "INSUFFICIENT_BALANCE",
-        required: tournament.entryFee,
+        required: chargeAmount,
         balance: user.walletBalance,
       });
       return;
     }
 
-    // Deduct entry fee from wallet
+    // Deduct total team entry fee from wallet
     await db.update(usersTable)
-      .set({ walletBalance: user.walletBalance - tournament.entryFee })
+      .set({ walletBalance: user.walletBalance - chargeAmount })
       .where(eq(usersTable.id, req.session.userId!));
 
     // Record transaction
     await db.insert(transactionsTable).values({
       userId: req.session.userId!,
       type: "withdrawal",
-      amount: tournament.entryFee,
+      amount: chargeAmount,
       status: "completed",
-      description: `Entry fee for tournament: ${tournament.title}`,
+      description: `Entry fee for ${tournament.title} (${tournament.gameMode}: ₹${tournament.entryFee} × ${multiplier})`,
     });
 
     // Create registration as verified (wallet payment = instant verification)
