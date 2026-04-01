@@ -1,8 +1,10 @@
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useGetTournaments, useGetGlobalLeaderboard, getGetTournamentsQueryKey, getGetGlobalLeaderboardQueryKey } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trophy, Users, Zap, IndianRupee, ArrowRight, Activity, Medal, Swords } from "lucide-react";
+import { Trophy, Users, Zap, IndianRupee, ArrowRight, Activity, Medal, Swords, Crosshair, Flame } from "lucide-react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 
@@ -16,6 +18,12 @@ export default function Home() {
     { limit: 3 },
     { query: { queryKey: getGetGlobalLeaderboardQueryKey({ limit: 3 }) } }
   );
+
+  const { data: statsData } = useQuery<{ totalPlayers: number; topKiller: { userId: number; totalKills: number; user: { inGameName: string; freeFireUid: string } } | null }>({
+    queryKey: ["leaderboard-stats"],
+    queryFn: () => customFetch("/api/leaderboard/stats"),
+    staleTime: 60_000,
+  });
 
   return (
     <div className="space-y-16 pb-12">
@@ -161,6 +169,49 @@ export default function Home() {
           <Link href="/leaderboard" className="text-secondary hover:text-primary font-mono text-sm uppercase tracking-wider hidden sm:flex items-center gap-1">
             Full Rankings <ArrowRight className="h-4 w-4" />
           </Link>
+        </div>
+
+        {/* Live platform stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Total Registered Players */}
+          <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-card/60 backdrop-blur p-5 flex items-center gap-4 shadow-[0_0_20px_rgba(0,245,255,0.08)]">
+            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center shadow-[0_0_12px_rgba(0,245,255,0.3)]">
+              <Users className="h-7 w-7 text-primary" />
+            </div>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Total Registered IDs</p>
+              <p className="text-4xl font-black font-display text-primary tabular-nums leading-none">
+                {statsData?.totalPlayers ?? "—"}
+              </p>
+              <p className="font-mono text-xs text-muted-foreground mt-1">Warriors on the platform</p>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+          </div>
+
+          {/* Top Fragger */}
+          <div className="relative overflow-hidden rounded-xl border border-destructive/30 bg-card/60 backdrop-blur p-5 flex items-center gap-4 shadow-[0_0_20px_rgba(255,60,60,0.08)]">
+            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center shadow-[0_0_12px_rgba(255,60,60,0.3)]">
+              <Crosshair className="h-7 w-7 text-destructive" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
+                <Flame className="h-3 w-3 text-orange-400" /> Top Fragger — Most Kills
+              </p>
+              {statsData?.topKiller ? (
+                <>
+                  <p className="text-2xl font-black font-display text-destructive uppercase tracking-wider leading-none truncate">
+                    {statsData.topKiller.user.inGameName}
+                  </p>
+                  <p className="font-mono text-sm text-muted-foreground mt-1">
+                    <span className="text-orange-400 font-bold">{statsData.topKiller.totalKills}</span> total kills · UID {statsData.topKiller.user.freeFireUid}
+                  </p>
+                </>
+              ) : (
+                <p className="text-2xl font-black font-display text-muted-foreground leading-none">No kills yet</p>
+              )}
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-destructive/5 via-transparent to-transparent pointer-events-none" />
+          </div>
         </div>
 
         {isLoadingLeaderboard ? (

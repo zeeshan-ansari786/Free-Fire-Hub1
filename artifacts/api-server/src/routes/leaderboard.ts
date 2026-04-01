@@ -109,6 +109,30 @@ router.post("/tournaments/:id/leaderboard", requireAdmin, async (req, res): Prom
   res.json(results);
 });
 
+router.get("/leaderboard/stats", async (req, res): Promise<void> => {
+  const [[{ totalPlayers }], topKillerRow] = await Promise.all([
+    db.select({ totalPlayers: sql<number>`count(*)` }).from(usersTable),
+    db.select({
+      userId: leaderboardTable.userId,
+      totalKills: sql<number>`sum(${leaderboardTable.kills})`,
+    })
+      .from(leaderboardTable)
+      .groupBy(leaderboardTable.userId)
+      .orderBy(desc(sql`sum(${leaderboardTable.kills})`))
+      .limit(1),
+  ]);
+
+  let topKiller = null;
+  if (topKillerRow[0]) {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, topKillerRow[0].userId));
+    if (user) {
+      topKiller = { userId: user.id, totalKills: Number(topKillerRow[0].totalKills), user: formatUser(user) };
+    }
+  }
+
+  res.json({ totalPlayers: Number(totalPlayers), topKiller });
+});
+
 router.get("/leaderboard/global", async (req, res): Promise<void> => {
   const { page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = parseInt(page, 10) || 1;
