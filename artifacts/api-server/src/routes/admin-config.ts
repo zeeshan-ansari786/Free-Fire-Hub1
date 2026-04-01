@@ -58,24 +58,30 @@ router.get("/payment-config", async (req, res): Promise<void> => {
 
 // GET admin config (full config for admin panel)
 router.get("/admin/config", requireAdmin, async (req, res): Promise<void> => {
-  const [upiId, qrCodeUrl, upiName] = await Promise.all([
+  const [upiId, qrCodeUrl, upiName, whatsappApiKey] = await Promise.all([
     getConfig("upi_id"),
     getConfig("qr_code_url"),
     getConfig("upi_name"),
+    getConfig("whatsapp_api_key"),
   ]);
   res.json({
     upiId: upiId ?? "ffarena@upi",
     upiName: upiName ?? "FF Arena Official",
     qrCodeUrl: qrCodeUrl ?? null,
+    whatsappApiKey: whatsappApiKey ? "••••••••" : null,
+    whatsappConfigured: !!whatsappApiKey,
   });
 });
 
-// PUT admin config (update UPI ID, name)
+// PUT admin config (update UPI ID, name, WhatsApp API key)
 router.put("/admin/config", requireAdmin, async (req, res): Promise<void> => {
-  const { upiId, upiName } = req.body;
+  const { upiId, upiName, whatsappApiKey } = req.body;
   if (upiId !== undefined) await setConfig("upi_id", upiId.trim());
   if (upiName !== undefined) await setConfig("upi_name", upiName.trim());
-  res.json({ message: "Payment config updated" });
+  if (whatsappApiKey !== undefined && whatsappApiKey.trim()) {
+    await setConfig("whatsapp_api_key", whatsappApiKey.trim());
+  }
+  res.json({ message: "Config updated" });
 });
 
 // POST upload QR code image

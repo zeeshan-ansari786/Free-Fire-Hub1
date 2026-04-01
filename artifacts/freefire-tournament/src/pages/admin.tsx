@@ -50,7 +50,7 @@ type FinancialData = {
   totalDeposits: number; depositCount: number; totalWithdrawals: number; withdrawalCount: number;
   pendingWithdrawals: PendingTxn[]; pendingDeposits: PendingTxn[];
 };
-type AdminPaymentConfig = { upiId: string; upiName: string; qrCodeUrl: string | null };
+type AdminPaymentConfig = { upiId: string; upiName: string; qrCodeUrl: string | null; whatsappConfigured: boolean; whatsappApiKey: string | null };
 
 function useAdminConfig(enabled = true) {
   return useQuery({ queryKey: ["admin-config"], queryFn: () => customFetch<AdminPaymentConfig>("/api/admin/config", { method: "GET" }), enabled });
@@ -58,7 +58,7 @@ function useAdminConfig(enabled = true) {
 function useUpdateAdminConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { upiId?: string; upiName?: string }) =>
+    mutationFn: (data: { upiId?: string; upiName?: string; whatsappApiKey?: string }) =>
       customFetch<{ message: string }>("/api/admin/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-config"] }); qc.invalidateQueries({ queryKey: ["payment-config"] }); },
   });
@@ -243,6 +243,7 @@ export default function Admin() {
   const [playerDetailUser, setPlayerDetailUser] = useState<UserEntry | null>(null);
   const [walletAdjust, setWalletAdjust] = useState({ amount: "", reason: "", type: "credit" as "credit" | "debit" });
   const [upiForm, setUpiForm] = useState({ upiId: "", upiName: "" });
+  const [whatsappApiKey, setWhatsappApiKey] = useState("");
   const [qrPreview, setQrPreview] = useState<string | null>(null);
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -1066,6 +1067,52 @@ export default function Admin() {
                   <p className="text-xs font-mono text-muted-foreground">Supported: JPG, PNG, WebP — Max 5MB</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* WhatsApp Notifications */}
+          <Card className="bg-card/50 border-secondary/30">
+            <CardHeader>
+              <CardTitle className="font-display uppercase tracking-wider text-xl text-secondary flex items-center gap-2">
+                <span className="text-lg">💬</span> WhatsApp Notifications
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-background/40 border border-border/30 rounded p-3 font-mono text-xs text-muted-foreground space-y-1">
+                <p><span className="text-foreground font-bold">Notify number:</span> <span className="text-secondary">+91 7777915823</span></p>
+                <p>
+                  <span className="text-foreground font-bold">Status:</span>{" "}
+                  {adminConfig?.whatsappConfigured
+                    ? <span className="text-green-400">✓ Configured — notifications active</span>
+                    : <span className="text-yellow-500">⚠ Not configured — notifications disabled</span>}
+                </p>
+              </div>
+              <div className="bg-primary/5 border border-primary/20 rounded p-3 text-xs font-mono text-muted-foreground space-y-1">
+                <p className="text-foreground font-semibold uppercase tracking-wide">Setup (one-time):</p>
+                <p>1. On WhatsApp, message <span className="text-secondary">+34 644 59 21 68</span></p>
+                <p>2. Send: <span className="text-primary">I allow callmebot to send me messages</span></p>
+                <p>3. You'll receive your API key — paste it below.</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="font-mono text-xs uppercase text-muted-foreground">CallMeBot API Key</Label>
+                <Input
+                  type="password"
+                  value={whatsappApiKey}
+                  onChange={e => setWhatsappApiKey(e.target.value)}
+                  placeholder={adminConfig?.whatsappConfigured ? "••••••••  (key saved)" : "Enter API key from CallMeBot"}
+                  className="bg-background/50 border-border/50 font-mono"
+                />
+              </div>
+              <Button
+                disabled={isUpdatingConfig || !whatsappApiKey.trim()}
+                onClick={() => updateConfig({ whatsappApiKey }, {
+                  onSuccess: () => { toast({ title: "WhatsApp key saved!", description: "Notifications are now active." }); setWhatsappApiKey(""); },
+                  onError: () => toast({ title: "Save failed", variant: "destructive" }),
+                })}
+                className="bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest"
+              >
+                {isUpdatingConfig ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save WhatsApp Key"}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

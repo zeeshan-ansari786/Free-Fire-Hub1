@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, usersTable, transactionsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
+import { notifyDeposit, notifyWithdrawal } from "../services/whatsapp";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,14 @@ router.post("/wallet/deposit", requireAuth, async (req, res): Promise<void> => {
     description: `Deposit via ${method} | Ref: ${transactionRef.trim()}`,
   });
 
+  // Fire WhatsApp notification to admin (non-blocking)
+  notifyDeposit({
+    playerName: user.inGameName || user.username,
+    amount: amountNum,
+    ref: transactionRef.trim(),
+    method,
+  }).catch(() => {});
+
   res.json({
     walletBalance: user.walletBalance,
     message: `Deposit request of ₹${amountNum} submitted. Will be credited within 5 minutes after admin approval.`,
@@ -81,6 +90,13 @@ router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => 
     status: "pending",
     description: `Withdrawal to UPI: ${upiId}`,
   });
+
+  // Fire WhatsApp notification to admin (non-blocking)
+  notifyWithdrawal({
+    playerName: user.inGameName || user.username,
+    amount: amountNum,
+    upiId,
+  }).catch(() => {});
 
   res.json({ walletBalance: newBalance, message: `₹${amountNum} withdrawal requested. Admin will process within 24 hours.` });
 });
