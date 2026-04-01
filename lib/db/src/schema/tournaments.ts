@@ -17,6 +17,7 @@ export const tournamentsTable = pgTable("tournaments", {
   mapName: text("map_name").notNull().default("Bermuda"),
   gameMode: text("game_mode").notNull().default("squad"),
   bannerUrl: text("banner_url"),
+  perKillPrize: integer("per_kill_prize").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

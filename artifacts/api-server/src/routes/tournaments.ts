@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, tournamentsTable, registrationsTable, usersTable } from "@workspace/db";
+import { db, tournamentsTable, registrationsTable, usersTable, leaderboardTable } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 
@@ -33,7 +33,7 @@ router.get("/tournaments", async (req, res): Promise<void> => {
 });
 
 router.post("/tournaments", requireAdmin, async (req, res): Promise<void> => {
-  const { title, description, prizePool, entryFee, startDateTime, maxSlots, mapName, gameMode, bannerUrl } = req.body;
+  const { title, description, prizePool, entryFee, perKillPrize, startDateTime, maxSlots, mapName, gameMode, bannerUrl } = req.body;
 
   if (!title || !startDateTime || !maxSlots) {
     res.status(400).json({ error: "Missing required fields" });
@@ -45,6 +45,7 @@ router.post("/tournaments", requireAdmin, async (req, res): Promise<void> => {
     description,
     prizePool: prizePool ?? 0,
     entryFee: entryFee ?? 0,
+    perKillPrize: perKillPrize ?? 0,
     startDateTime: new Date(startDateTime),
     maxSlots,
     mapName: mapName ?? "Bermuda",
@@ -117,13 +118,14 @@ router.put("/tournaments/:id", requireAdmin, async (req, res): Promise<void> => 
     return;
   }
 
-  const { title, description, prizePool, entryFee, startDateTime, maxSlots, status, mapName, gameMode, bannerUrl } = req.body;
+  const { title, description, prizePool, entryFee, perKillPrize, startDateTime, maxSlots, status, mapName, gameMode, bannerUrl } = req.body;
 
   const updates: Partial<typeof tournamentsTable.$inferInsert> = {};
   if (title != null) updates.title = title;
   if (description != null) updates.description = description;
   if (prizePool != null) updates.prizePool = prizePool;
   if (entryFee != null) updates.entryFee = entryFee;
+  if (perKillPrize != null) updates.perKillPrize = perKillPrize;
   if (startDateTime != null) updates.startDateTime = new Date(startDateTime);
   if (maxSlots != null) updates.maxSlots = maxSlots;
   if (status != null) updates.status = status;
@@ -144,6 +146,36 @@ router.put("/tournaments/:id", requireAdmin, async (req, res): Promise<void> => 
   res.json(tournament);
 });
 
+router.delete("/tournaments/:id", requireAdmin, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid tournament ID" }); return; }
+
+  const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, id));
+  if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
+
+  // Refund entry fees to verified/free registrants
+  if (tournament.entryFee > 0) {
+    const regs = await db.select().from(registrationsTable)
+      .where(and(eq(registrationsTable.tournamentId, id)));
+    for (const reg of regs) {
+      if (reg.paymentStatus === "verified" || reg.paymentStatus === "free") {
+        await db.update(usersTable)
+          .set({ walletBalance: sql`wallet_balance + ${tournament.entryFee}` })
+          .where(eq(usersTable.id, reg.userId));
+      }
+    }
+  }
+
+  // Cascade delete registrations and leaderboard, then tournament
+  await db.delete(registrationsTable).where(eq(registrationsTable.tournamentId, id));
+  await db.delete(leaderboardTable).where(eq(leaderboardTable.tournamentId, id));
+  await db.delete(tournamentsTable).where(eq(tournamentsTable.id, id));
+
+  res.json({ success: true, message: `Tournament "${tournament.title}" deleted successfully` });
+});
+
 router.post("/tournaments/:id/room", requireAdmin, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -153,15 +185,18 @@ router.post("/tournaments/:id/room", requireAdmin, async (req, res): Promise<voi
     return;
   }
 
-  const { roomId, roomPassword } = req.body;
+  const { roomId, roomPassword, perKillPrize } = req.body;
 
   if (!roomId || !roomPassword) {
     res.status(400).json({ error: "Room ID and password required" });
     return;
   }
 
+  const setData: Partial<typeof tournamentsTable.$inferInsert> = { roomId, roomPassword };
+  if (perKillPrize != null) setData.perKillPrize = perKillPrize;
+
   const [tournament] = await db.update(tournamentsTable)
-    .set({ roomId, roomPassword })
+    .set(setData)
     .where(eq(tournamentsTable.id, id))
     .returning();
 

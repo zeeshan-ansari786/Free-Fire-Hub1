@@ -21,14 +21,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2 } from "lucide-react";
+import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2, Trash2, AlertTriangle } from "lucide-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
 
 type Tournament = {
   id: number; title: string; description?: string | null; startDateTime: string;
   mapName: string; gameMode: string; maxSlots: number; filledSlots: number;
-  status: string; prizePool: number; entryFee: number; bannerUrl?: string | null;
+  status: string; prizePool: number; entryFee: number; perKillPrize: number; bannerUrl?: string | null;
   roomId?: string | null; roomPassword?: string | null;
 };
 
@@ -201,8 +201,9 @@ export default function Admin() {
   const [kickDialog, setKickDialog] = useState<{ reg: PlayerReg; tournamentId: number } | null>(null);
   const [kickReason, setKickReason] = useState("");
   const [editForm, setEditForm] = useState({ title: "", description: "", startDateTime: "", mapName: "", gameMode: "", maxSlots: "", status: "", bannerUrl: "" });
-  const [roomForm, setRoomForm] = useState({ roomId: "", roomPassword: "" });
-  const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
+  const [roomForm, setRoomForm] = useState({ roomId: "", roomPassword: "", perKillPrize: "0" });
+  const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", perKillPrize: "0", bannerUrl: "" });
+  const [deleteTournament, setDeleteTournament] = useState<Tournament | null>(null);
   const [resultsTournamentId, setResultsTournamentId] = useState<number | null>(null);
   const [resultRows, setResultRows] = useState<Array<{ userId: number; inGameName: string; kills: number; placement: number; prize: number }>>([]);
   const [playerDetailUser, setPlayerDetailUser] = useState<UserEntry | null>(null);
@@ -268,11 +269,22 @@ export default function Admin() {
 
   const handleRoomSave = () => {
     if (!roomTournament) return;
-    postRoom({ id: roomTournament.id, data: { roomId: roomForm.roomId, roomPassword: roomForm.roomPassword } }, {
+    postRoom({ id: roomTournament.id, data: { roomId: roomForm.roomId, roomPassword: roomForm.roomPassword, perKillPrize: parseFloat(roomForm.perKillPrize) || 0 } }, {
       onSuccess: () => { toast({ title: "Room details saved!" }); setRoomTournament(null); queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) }); },
       onError: (err) => toast({ title: "Failed", description: (err as any)?.error?.message, variant: "destructive" })
     });
   };
+
+  const { mutate: deleteTournamentMutate, isPending: isDeleting } = useMutation({
+    mutationFn: (id: number) => customFetch(`/api/tournaments/${id}`, { method: "DELETE" }),
+    onSuccess: (_, id) => {
+      toast({ title: "Tournament deleted", description: `"${deleteTournament?.title}" has been removed.` });
+      setDeleteTournament(null);
+      queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) });
+      queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({}) });
+    },
+    onError: (err: any) => toast({ title: "Delete failed", description: err?.data?.error || "Could not delete tournament", variant: "destructive" }),
+  });
 
   const handleCreate = () => {
     if (!createForm.title.trim()) { toast({ title: "Tournament title is required", variant: "destructive" }); return; }
@@ -286,11 +298,12 @@ export default function Admin() {
       maxSlots: parseInt(createForm.maxSlots) || 100,
       prizePool: parseFloat(createForm.prizePool) || 0,
       entryFee: parseFloat(createForm.entryFee) || 0,
+      perKillPrize: parseFloat(createForm.perKillPrize) || 0,
       bannerUrl: createForm.bannerUrl.trim() || undefined,
     }, {
       onSuccess: () => {
         toast({ title: "Tournament created!", description: `"${createForm.title}" is now live.` });
-        setCreateForm({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
+        setCreateForm({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", perKillPrize: "0", bannerUrl: "" });
       },
       onError: (err: any) => toast({ title: "Failed to create", description: err?.data?.error || err?.message || "Something went wrong", variant: "destructive" }),
     });
@@ -478,7 +491,8 @@ export default function Admin() {
                     <div className="flex gap-2 shrink-0 flex-wrap">
                       <Button size="sm" variant="outline" className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 font-mono text-xs h-8" onClick={() => setPlayersTournament(t)}><Eye className="h-3 w-3 mr-1" /> Players</Button>
                       <Button size="sm" variant="outline" className="border-primary/40 text-primary hover:bg-primary/10 font-mono text-xs h-8" onClick={() => openEdit(t)}><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
-                      <Button size="sm" variant="outline" className="border-secondary/40 text-secondary hover:bg-secondary/10 font-mono text-xs h-8" onClick={() => { setRoomTournament(t); setRoomForm({ roomId: t.roomId ?? "", roomPassword: t.roomPassword ?? "" }); }}><Key className="h-3 w-3 mr-1" /> Room</Button>
+                      <Button size="sm" variant="outline" className="border-secondary/40 text-secondary hover:bg-secondary/10 font-mono text-xs h-8" onClick={() => { setRoomTournament(t); setRoomForm({ roomId: t.roomId ?? "", roomPassword: t.roomPassword ?? "", perKillPrize: String(t.perKillPrize ?? 0) }); }}><Key className="h-3 w-3 mr-1" /> Room</Button>
+                      <Button size="sm" variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10 font-mono text-xs h-8" onClick={() => setDeleteTournament(t)}><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>
                     </div>
                   </div>
                 </CardContent>
@@ -512,6 +526,10 @@ export default function Admin() {
                 <div className="space-y-1">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Prize Pool (₹)</Label>
                   <Input type="number" value={createForm.prizePool} onChange={e => setCreateForm(f => ({ ...f, prizePool: e.target.value }))} className="bg-background/50 border-border/50 font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Per Kill Prize (₹) <span className="text-muted-foreground text-xs normal-case">(bonus per kill from wallet)</span></Label>
+                  <Input type="number" min="0" value={createForm.perKillPrize} onChange={e => setCreateForm(f => ({ ...f, perKillPrize: e.target.value }))} placeholder="0 = no kill prize" className="bg-background/50 border-border/50 font-mono" />
                 </div>
                 <div className="space-y-1">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Map</Label>
@@ -939,6 +957,28 @@ export default function Admin() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Tournament Confirmation Dialog */}
+      <Dialog open={!!deleteTournament} onOpenChange={open => !open && setDeleteTournament(null)}>
+        <DialogContent className="bg-card border-destructive/40 max-w-sm">
+          <DialogHeader><DialogTitle className="font-display uppercase tracking-wider text-destructive flex items-center gap-2"><AlertTriangle className="h-5 w-5" /> Delete Tournament</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="bg-destructive/10 border border-destructive/30 rounded p-3 space-y-1">
+              <p className="font-bold font-display uppercase text-sm">{deleteTournament?.title}</p>
+              <p className="text-xs font-mono text-muted-foreground">{deleteTournament?.filledSlots} registered players · {deleteTournament?.status?.toUpperCase()}</p>
+            </div>
+            <p className="text-sm font-mono text-muted-foreground">This will permanently delete the tournament and all its registrations. If it has an entry fee, verified players will be refunded automatically.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 border-border/50" onClick={() => setDeleteTournament(null)}>Cancel</Button>
+              <Button
+                disabled={isDeleting}
+                onClick={() => deleteTournament && deleteTournamentMutate(deleteTournament.id)}
+                className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold uppercase tracking-widest"
+              >{isDeleting ? "Deleting..." : "Delete"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Room Dialog */}
       <Dialog open={!!roomTournament} onOpenChange={open => !open && setRoomTournament(null)}>
         <DialogContent className="bg-card border-secondary/30 max-w-md">
@@ -947,7 +987,12 @@ export default function Admin() {
           <div className="space-y-4 pt-2">
             <div className="space-y-1"><Label className="font-mono text-xs uppercase text-muted-foreground">Room ID</Label><Input value={roomForm.roomId} onChange={e => setRoomForm(f => ({ ...f, roomId: e.target.value }))} placeholder="e.g. 1234567" className="bg-background/50 border-border/50 font-mono text-lg tracking-widest" /></div>
             <div className="space-y-1"><Label className="font-mono text-xs uppercase text-muted-foreground">Room Password</Label><Input value={roomForm.roomPassword} onChange={e => setRoomForm(f => ({ ...f, roomPassword: e.target.value }))} placeholder="e.g. ff2024" className="bg-background/50 border-border/50 font-mono text-lg tracking-widest" /></div>
-            <p className="text-xs text-muted-foreground font-mono">Only verified players will see these details 15 mins before start.</p>
+            <div className="space-y-1">
+              <Label className="font-mono text-xs uppercase text-muted-foreground flex items-center gap-1"><IndianRupee className="h-3 w-3" /> Per Kill Prize (₹)</Label>
+              <Input type="number" min="0" value={roomForm.perKillPrize} onChange={e => setRoomForm(f => ({ ...f, perKillPrize: e.target.value }))} placeholder="0 = no kill bonus" className="bg-background/50 border-secondary/30 font-mono text-lg" />
+              <p className="text-xs text-muted-foreground font-mono">Players earn this amount per kill in this match.</p>
+            </div>
+            <p className="text-xs text-muted-foreground font-mono">Only verified players will see Room ID & Password 15 mins before start.</p>
             <div className="flex gap-3 pt-2">
               <Button variant="outline" className="flex-1 border-border/50" onClick={() => setRoomTournament(null)}>Cancel</Button>
               <Button onClick={handleRoomSave} disabled={isPostingRoom || !roomForm.roomId || !roomForm.roomPassword} className="flex-1 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest">{isPostingRoom ? "Saving..." : "Post Room"}</Button>
