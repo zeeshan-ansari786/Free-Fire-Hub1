@@ -72,13 +72,23 @@ export default function TournamentDetail() {
 
   useEffect(() => {
     if (!tournament?.startDateTime || tournament.status !== "upcoming") return;
-    const interval = setInterval(() => {
+
+    const compute = () => {
       const diff = differenceInSeconds(new Date(tournament.startDateTime), new Date());
-      if (diff <= 0) { setTimeLeft({ d: 0, h: 0, m: 0, s: 0 }); clearInterval(interval); }
-      else setTimeLeft({ d: Math.floor(diff / (3600 * 24)), h: Math.floor((diff % (3600 * 24)) / 3600), m: Math.floor((diff % 3600) / 60), s: diff % 60 });
+      if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0 };
+      return { d: Math.floor(diff / 86400), h: Math.floor((diff % 86400) / 3600), m: Math.floor((diff % 3600) / 60), s: diff % 60 };
+    };
+
+    // Populate immediately so there's no blank flash
+    setTimeLeft(compute());
+
+    const interval = setInterval(() => {
+      const t = compute();
+      setTimeLeft(t);
+      if (t.d === 0 && t.h === 0 && t.m === 0 && t.s === 0) clearInterval(interval);
     }, 1000);
     return () => clearInterval(interval);
-  }, [tournament]);
+  }, [tournament?.startDateTime, tournament?.status]);
 
   const updateMember = (index: number, field: "uid" | "name", value: string) => {
     setTeamMembers(prev => prev.map((m, i) => i === index ? { ...m, [field]: value } : m));

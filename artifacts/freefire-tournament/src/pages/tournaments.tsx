@@ -1,11 +1,46 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useGetTournaments, getGetTournamentsQueryKey, type GetTournamentsStatus } from "@workspace/api-client-react";
-import { format } from "date-fns";
+import { format, differenceInSeconds } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Swords, IndianRupee, Zap, Map, Users } from "lucide-react";
+import { Swords, IndianRupee, Zap, Map, Users, Timer } from "lucide-react";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
+
+function TournamentCountdown({ startDateTime }: { startDateTime: string }) {
+  const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
+
+  useEffect(() => {
+    const compute = () => {
+      const diff = differenceInSeconds(new Date(startDateTime), new Date());
+      if (diff <= 0) return null;
+      return { d: Math.floor(diff / 86400), h: Math.floor((diff % 86400) / 3600), m: Math.floor((diff % 3600) / 60), s: diff % 60 };
+    };
+    setTimeLeft(compute());
+    const interval = setInterval(() => { setTimeLeft(compute()); }, 1000);
+    return () => clearInterval(interval);
+  }, [startDateTime]);
+
+  if (!timeLeft) return (
+    <span className="flex items-center gap-1 text-destructive font-bold">
+      <Timer className="h-3 w-3" /> Starting Now!
+    </span>
+  );
+
+  if (timeLeft.d > 0) return (
+    <span className="flex items-center gap-1 text-primary font-mono font-bold">
+      <Timer className="h-3 w-3" />
+      {timeLeft.d}d {String(timeLeft.h).padStart(2,"0")}h {String(timeLeft.m).padStart(2,"0")}m
+    </span>
+  );
+
+  return (
+    <span className="flex items-center gap-1 font-mono font-bold text-yellow-400 animate-pulse">
+      <Timer className="h-3 w-3" />
+      {String(timeLeft.h).padStart(2,"0")}:{String(timeLeft.m).padStart(2,"0")}:{String(timeLeft.s).padStart(2,"0")}
+    </span>
+  );
+}
 
 export default function Tournaments() {
   const [statusFilter, setStatusFilter] = useState<GetTournamentsStatus | undefined>("upcoming");
@@ -103,11 +138,23 @@ export default function Tournaments() {
                 <CardContent className="p-5 flex-1 flex flex-col justify-between relative z-10">
                   <div>
                     <h3 className="text-xl font-bold font-display uppercase tracking-wider mb-2 group-hover:text-primary transition-colors line-clamp-2">{t.title}</h3>
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground font-mono mb-4">
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground font-mono mb-3">
                       <span className="flex items-center gap-1"><Zap className="h-3 w-3 text-primary" /> {format(new Date(t.startDateTime), "MMM do, h:mm a")}</span>
                       <span className="flex items-center gap-1"><Map className="h-3 w-3 text-secondary" /> {t.mapName}</span>
                       <span className="flex items-center gap-1"><Users className="h-3 w-3 text-white" /> {t.gameMode.toUpperCase()}</span>
                     </div>
+                    {t.status === "upcoming" && (
+                      <div className="flex items-center gap-2 mb-3 bg-primary/5 border border-primary/20 rounded px-3 py-1.5 w-fit text-xs">
+                        <span className="text-muted-foreground font-mono uppercase tracking-wider">Starts in</span>
+                        <TournamentCountdown startDateTime={t.startDateTime} />
+                      </div>
+                    )}
+                    {t.status === "ongoing" && (
+                      <div className="flex items-center gap-2 mb-3 bg-secondary/5 border border-secondary/20 rounded px-3 py-1.5 w-fit text-xs">
+                        <span className="inline-block w-2 h-2 rounded-full bg-secondary animate-pulse" />
+                        <span className="text-secondary font-mono font-bold uppercase tracking-wider">LIVE NOW</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mt-4">
