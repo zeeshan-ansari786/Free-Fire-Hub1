@@ -924,17 +924,30 @@ export default function Admin() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tournamentPlayers.map(reg => (
+                  {tournamentPlayers.map(reg => {
+                    const selfEntry = (reg.teamMembers as any[])?.find((m: any) => m.self);
+                    const teammates = (reg.teamMembers as any[])?.filter((m: any) => !m.self) ?? [];
+                    const playingUid = selfEntry?.uid || reg.user?.freeFireUid;
+                    const playingIgn = selfEntry?.name || reg.user?.inGameName;
+                    return (
                     <TableRow key={reg.id} className={reg.paymentStatus === "rejected" ? "opacity-40" : ""}>
                       <TableCell>
                         <span className="block font-bold">{reg.user?.inGameName ?? `User #${reg.userId}`}</span>
                         <span className="text-xs text-muted-foreground">{reg.user?.email}</span>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{reg.user?.freeFireUid}</TableCell>
                       <TableCell>
-                        {reg.teamMembers && reg.teamMembers.length > 0 ? (
+                        <div className="text-xs">
+                          <div className="font-bold text-secondary">{playingIgn}</div>
+                          <div className="text-muted-foreground font-mono">{playingUid}</div>
+                          {selfEntry && playingUid !== reg.user?.freeFireUid && (
+                            <div className="text-yellow-500 text-[10px]">↑ playing UID</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {teammates.length > 0 ? (
                           <div className="space-y-0.5">
-                            {reg.teamMembers.map((m, i) => (
+                            {teammates.map((m: any, i: number) => (
                               <div key={i} className="text-xs text-muted-foreground">{m.name} <span className="text-foreground/50">({m.uid})</span></div>
                             ))}
                           </div>
@@ -955,7 +968,8 @@ export default function Admin() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  );
+                  })}
                 </TableBody>
               </Table>
             </div>

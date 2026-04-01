@@ -45,7 +45,10 @@ export default function TournamentDetail() {
   const [insufficientData, setInsufficientData] = useState<{ required: number; balance: number } | null>(null);
   const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
 
-  // Dynamic team members for duo/squad
+  // Player's own playing UID/IGN (can differ from account UID)
+  const [playerInfo, setPlayerInfo] = useState({ uid: "", name: "" });
+
+  // Dynamic team members for duo/squad (teammates only, not self)
   const getDefaultMembers = (mode: string): TeamMember[] => {
     if (mode === "duo") return [{ uid: "", name: "" }];
     if (mode === "squad") return [{ uid: "", name: "" }, { uid: "", name: "" }, { uid: "", name: "" }];
@@ -56,6 +59,16 @@ export default function TournamentDetail() {
   useEffect(() => {
     if (tournament?.gameMode) setTeamMembers(getDefaultMembers(tournament.gameMode));
   }, [tournament?.gameMode]);
+
+  // Pre-fill player info from account when dialog opens
+  useEffect(() => {
+    if (isRegisterOpen && user) {
+      setPlayerInfo(prev => ({
+        uid: prev.uid || (user as any).freeFireUid || "",
+        name: prev.name || (user as any).inGameName || "",
+      }));
+    }
+  }, [isRegisterOpen]);
 
   useEffect(() => {
     if (!tournament?.startDateTime || tournament.status !== "upcoming") return;
@@ -76,6 +89,11 @@ export default function TournamentDetail() {
       toast({ title: "Login required", description: "You must be logged in to register.", variant: "destructive" });
       return;
     }
+    // Validate player's own UID and IGN
+    if (!playerInfo.uid.trim() || !playerInfo.name.trim()) {
+      toast({ title: "Your UID & IGN required", description: "Please enter your Free Fire UID and in-game name.", variant: "destructive" });
+      return;
+    }
     // Validate team members
     const invalidMember = teamMembers.find(m => !m.uid.trim() || !m.name.trim());
     if (invalidMember) {
@@ -83,8 +101,14 @@ export default function TournamentDetail() {
       return;
     }
 
+    // Build full team list: player first (self: true), then teammates
+    const allMembers = [
+      { uid: playerInfo.uid.trim(), name: playerInfo.name.trim(), self: true },
+      ...teamMembers,
+    ];
+
     register(
-      { id: tournamentId, data: { teamMembers: teamMembers.length > 0 ? teamMembers : undefined } },
+      { id: tournamentId, data: { teamMembers: allMembers } },
       {
         onSuccess: () => {
           toast({ title: "Registered Successfully!", description: tournament?.entryFee === 0 ? "You're in! Check 'My Matches' for room details." : `₹${tournament?.entryFee} deducted from your wallet. You're in!` });
@@ -242,9 +266,37 @@ export default function TournamentDetail() {
                   {/* Mode info */}
                   <div className="bg-primary/5 border border-primary/20 rounded p-3 text-xs font-mono">
                     <span className="text-primary font-bold">{modeLabel[tournament.gameMode]}</span>
-                    {tournament.gameMode === "duo" && " — Add 1 teammate"}
-                    {tournament.gameMode === "squad" && " — Add 3 teammates"}
-                    {tournament.gameMode === "solo" && " — No teammates needed"}
+                    {tournament.gameMode === "duo" && " — You + 1 teammate"}
+                    {tournament.gameMode === "squad" && " — You + 3 teammates"}
+                    {tournament.gameMode === "solo" && " — Solo entry"}
+                  </div>
+
+                  {/* Player's own UID & IGN */}
+                  <div className="space-y-2">
+                    <Label className="font-mono text-xs uppercase text-muted-foreground flex items-center gap-1">
+                      <span className="text-secondary">★</span> Your Playing UID &amp; IGN
+                    </Label>
+                    <div className="grid grid-cols-2 gap-3 p-3 bg-secondary/5 border border-secondary/30 rounded">
+                      <div>
+                        <Label className="font-mono text-xs text-muted-foreground">Your Free Fire UID</Label>
+                        <Input
+                          value={playerInfo.uid}
+                          onChange={e => setPlayerInfo(p => ({ ...p, uid: e.target.value }))}
+                          placeholder="e.g. 1234567890"
+                          className="bg-background/30 border-border/50 font-mono mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-mono text-xs text-muted-foreground">Your IGN</Label>
+                        <Input
+                          value={playerInfo.name}
+                          onChange={e => setPlayerInfo(p => ({ ...p, name: e.target.value }))}
+                          placeholder="In-Game Name"
+                          className="bg-background/30 border-border/50 font-mono mt-1"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs font-mono text-muted-foreground">You can change your UID/IGN here if you're playing on a different account.</p>
                   </div>
 
                   {/* Team Members (Duo/Squad) */}
@@ -359,7 +411,7 @@ export default function TournamentDetail() {
           <CardContent>
             {isLoadingLeaderboard ? (
               <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-border/20 rounded animate-pulse" />)}</div>
-            ) : !leaderboard?.length && !(leaderboard as any)?.entries?.length ? (
+            ) : !Array.isArray(leaderboard) || leaderboard.length === 0 ? (
               <p className="text-center font-mono text-muted-foreground py-6">Results not posted yet.</p>
             ) : (
               <Table className="font-mono">
@@ -374,7 +426,7 @@ export default function TournamentDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {((leaderboard as any)?.entries || leaderboard as any[])?.map((entry: any) => (
+                  {(leaderboard as any[]).map((entry: any) => (
                     <TableRow key={entry.id} className={entry.placement === 1 ? "bg-secondary/5" : ""}>
                       <TableCell className="font-bold">
                         {entry.rank === 1 ? <Medal className="h-5 w-5 text-yellow-400" /> : entry.rank === 2 ? <Medal className="h-5 w-5 text-zinc-300" /> : entry.rank === 3 ? <Medal className="h-5 w-5 text-amber-600" /> : <span className="text-muted-foreground">#{entry.rank}</span>}
