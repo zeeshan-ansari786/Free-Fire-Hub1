@@ -77,6 +77,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  if (user.isBanned) {
+    res.status(403).json({ error: "Your account has been banned. Contact support." });
+    return;
+  }
+
   req.session.userId = user.id;
   res.json({ user: formatUser(user), message: "Login successful" });
 });
@@ -100,6 +105,12 @@ router.get("/auth/me", async (req, res): Promise<void> => {
 
   if (!user) {
     res.status(401).json({ error: "User not found" });
+    return;
+  }
+
+  if (user.isBanned) {
+    req.session.destroy(() => {});
+    res.status(403).json({ error: "Your account has been banned." });
     return;
   }
 

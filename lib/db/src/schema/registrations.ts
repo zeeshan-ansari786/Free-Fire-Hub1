@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -12,6 +12,7 @@ export const registrationsTable = pgTable("registrations", {
   paymentScreenshotUrl: text("payment_screenshot_url"),
   transactionId: text("transaction_id"),
   adminNote: text("admin_note"),
+  teamMembers: json("team_members").$type<Array<{ uid: string; name: string }>>(),
   registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

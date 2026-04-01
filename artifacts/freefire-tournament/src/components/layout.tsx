@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, User, ShieldAlert, LogOut, Swords, Menu } from "lucide-react";
+import { Bell, User, ShieldAlert, LogOut, Swords, Menu, Wallet, Trophy } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -26,9 +26,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <Link href="/tournaments" className={`hover:text-primary transition-colors ${location === "/tournaments" ? "text-primary neon-text" : "text-muted-foreground"}`}>Tournaments</Link>
       <Link href="/leaderboard" className={`hover:text-primary transition-colors ${location === "/leaderboard" ? "text-primary neon-text" : "text-muted-foreground"}`}>Leaderboard</Link>
       {isAuthenticated && (
-        <Link href="/notifications" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/notifications" ? "text-primary neon-text" : "text-muted-foreground"}`}>
-          Notifications <Bell className="h-4 w-4" />
-        </Link>
+        <>
+          <Link href="/my-matches" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/my-matches" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+            My Matches
+          </Link>
+          <Link href="/wallet" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/wallet" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+            Wallet
+          </Link>
+          <Link href="/notifications" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/notifications" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+            <Bell className="h-4 w-4" />
+          </Link>
+        </>
       )}
     </>
   );
@@ -53,6 +61,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 md:gap-4 z-10">
             {isAuthenticated ? (
               <div className="flex items-center gap-2 md:gap-3">
+                {/* Wallet balance quick view */}
+                <Link href="/wallet" className="hidden sm:flex items-center gap-1 text-xs font-mono text-secondary border border-secondary/30 px-2 py-1 rounded hover:bg-secondary/10 transition-colors">
+                  <Wallet className="h-3 w-3" />
+                  Wallet
+                </Link>
                 {user?.isAdmin && (
                   <Link href="/admin">
                     <Button variant="outline" size="sm" className="hidden sm:flex border-primary/50 hover:bg-primary/10 hover:text-primary transition-all clip-path-slant rounded-none font-mono">
@@ -97,7 +110,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <Link href="/login" className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold mt-4">Login</Link>
                   )}
                   {isAuthenticated && user?.isAdmin && (
-                    <Link href="/admin" className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold mt-4 flex items-center gap-2">
+                    <Link href="/admin" className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold flex items-center gap-2">
                       <ShieldAlert className="h-4 w-4" /> Admin Dashboard
                     </Link>
                   )}
@@ -116,9 +129,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="container mx-auto px-4 flex flex-col items-center justify-between gap-4 md:flex-row">
           <div className="flex items-center gap-2 opacity-80">
             <Swords className="h-5 w-5 text-primary" />
-            <span className="font-display text-xl font-bold tracking-wider uppercase text-foreground">
-              FF ARENA
-            </span>
+            <span className="font-display text-xl font-bold tracking-wider uppercase text-foreground">FF ARENA</span>
           </div>
           <p className="text-center text-sm text-muted-foreground font-mono">
             Built for competitive mobile gamers. Step into the arena.

@@ -1,0 +1,52 @@
+
+Role: Act as a Senior Full-Stack Developer specializing in MERN/Next.js and FinTech integrations.
+
+Task: Build the backend logic, database schema, and frontend UI components for a Free Fire Tournament Management System.
+
+1. Financial System (Deposit/Withdraw):
+
+    Deposit Logic: Integrate a mock or real payment gateway (like Razorpay or Stripe). When a user successfully deposits, the wallet_balance field in the database must update in real-time.
+
+    Withdrawal Logic: Create a request form for withdrawals. Deduct the amount from the "Current Balance" and move it to a "Pending Withdrawal" state until Admin approves.
+
+    UI: A "Wallet Dashboard" showing current balance and a transaction history table.
+
+2. Dynamic Registration System:
+
+    Conditional Inputs: Create a registration form that adapts based on the "Match Type" (Solo, Duo, Squad).
+
+        Solo: Ask for Game UID and In-Game Name (IGN).
+
+        Duo: Ask for UID and IGN for 2 players.
+
+        Squad: Ask for UID and IGN for 4 players.
+
+    Validation: Ensure all fields are required before allowing the user to click "Join Room."
+
+3. User Match Tracking:
+
+    Upcoming Component: A card-based layout showing rooms the user has already joined, displaying the Match Date, Time, and Room ID/Password (hidden until 15 mins before start).
+
+    Recent Matches Component: A history section showing matches played, rank achieved, and total kills/winnings.
+
+4. Admin Dashboard (Power Tools):
+
+    Room Management: A view for admins to see every room. Clicking a room should reveal a detailed list of joined players, their UIDs, and their team groupings.
+
+    User Management: A master list of all registered users with "Block" or "Ban" buttons. Banned users should be automatically logged out and prevented from logging back in.
+
+    Financial Overview: A summary of total deposits and a list of pending withdrawal requests for manual approval.
+
+5. Database Requirements:
+
+    Design a User Schema (with wallet, status, and match history).
+
+    Design a Tournament Schema (with prize pool, entry fee, match type, and joined_players array).
+
+Technical Stack Preference: * Frontend: React/Next.js with Tailwind CSS.
+
+    Backend: Node.js with Express.
+
+    Database: MongoDB 
+
+    State Management: Use Context API or Redux to ensure the wallet balance updates across the site without refreshing.

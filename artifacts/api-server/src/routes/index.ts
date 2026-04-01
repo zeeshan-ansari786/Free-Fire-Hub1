@@ -8,6 +8,8 @@ import playersRouter from "./players";
 import notificationsRouter from "./notifications";
 import reportsRouter from "./reports";
 import adminRouter from "./admin";
+import walletRouter from "./wallet";
+import myMatchesRouter from "./my-matches";
 
 const router: IRouter = Router();
 
@@ -20,5 +22,7 @@ router.use(playersRouter);
 router.use(notificationsRouter);
 router.use(reportsRouter);
 router.use(adminRouter);
+router.use(walletRouter);
+router.use(myMatchesRouter);
 
 export default router;

@@ -13,6 +13,8 @@ import Leaderboard from "@/pages/leaderboard";
 import Profile from "@/pages/profile";
 import Admin from "@/pages/admin";
 import Notifications from "@/pages/notifications";
+import Wallet from "@/pages/wallet";
+import MyMatches from "@/pages/my-matches";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -31,6 +33,8 @@ function Router() {
         <Route path="/profile/:userId" component={Profile} />
         <Route path="/admin" component={Admin} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/wallet" component={Wallet} />
+        <Route path="/my-matches" component={MyMatches} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
