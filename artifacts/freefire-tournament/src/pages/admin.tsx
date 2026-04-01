@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2, Trash2, AlertTriangle } from "lucide-react";
+import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2, Trash2, AlertTriangle, Copy } from "lucide-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
 
@@ -204,6 +204,7 @@ export default function Admin() {
   const [roomForm, setRoomForm] = useState({ roomId: "", roomPassword: "", perKillPrize: "0" });
   const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", perKillPrize: "0", bannerUrl: "" });
   const [deleteTournament, setDeleteTournament] = useState<Tournament | null>(null);
+  const [activeTab, setActiveTab] = useState("tournaments");
   const [resultsTournamentId, setResultsTournamentId] = useState<number | null>(null);
   const [resultRows, setResultRows] = useState<Array<{ userId: number; inGameName: string; kills: number; placement: number; prize: number }>>([]);
   const [playerDetailUser, setPlayerDetailUser] = useState<UserEntry | null>(null);
@@ -237,6 +238,17 @@ export default function Admin() {
   const { mutate: uploadBanner, isPending: isUploadingBanner } = useUploadBannerImage();
   const { data: resultsRegistrations, isLoading: resultsRegsLoading } = useTournamentRegistrations(resultsTournamentId);
   const { mutate: postLeaderboard, isPending: isPostingLeaderboard } = usePostLeaderboard();
+  const deleteTournamentRef = { current: deleteTournament };
+  const { mutate: deleteTournamentMutate, isPending: isDeleting } = useMutation({
+    mutationFn: (id: number) => customFetch(`/api/tournaments/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({ title: "Tournament deleted", description: `"${deleteTournamentRef.current?.title}" has been removed.` });
+      setDeleteTournament(null);
+      queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) });
+      queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({}) });
+    },
+    onError: (err: any) => toast({ title: "Delete failed", description: err?.data?.error || "Could not delete tournament", variant: "destructive" }),
+  });
 
   // Redirect non-admins after auth loads
   if (!authLoading && !user?.isAdmin) {
@@ -275,17 +287,6 @@ export default function Admin() {
     });
   };
 
-  const { mutate: deleteTournamentMutate, isPending: isDeleting } = useMutation({
-    mutationFn: (id: number) => customFetch(`/api/tournaments/${id}`, { method: "DELETE" }),
-    onSuccess: (_, id) => {
-      toast({ title: "Tournament deleted", description: `"${deleteTournament?.title}" has been removed.` });
-      setDeleteTournament(null);
-      queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({ limit: 50 }) });
-      queryClient.invalidateQueries({ queryKey: getGetTournamentsQueryKey({}) });
-    },
-    onError: (err: any) => toast({ title: "Delete failed", description: err?.data?.error || "Could not delete tournament", variant: "destructive" }),
-  });
-
   const handleCreate = () => {
     if (!createForm.title.trim()) { toast({ title: "Tournament title is required", variant: "destructive" }); return; }
     if (!createForm.startDateTime) { toast({ title: "Start date & time is required", variant: "destructive" }); return; }
@@ -307,6 +308,23 @@ export default function Admin() {
       },
       onError: (err: any) => toast({ title: "Failed to create", description: err?.data?.error || err?.message || "Something went wrong", variant: "destructive" }),
     });
+  };
+
+  const handleCopyTournament = (t: Tournament) => {
+    setCreateForm({
+      title: `${t.title} (Copy)`,
+      description: t.description ?? "",
+      startDateTime: "",
+      mapName: t.mapName,
+      gameMode: t.gameMode,
+      maxSlots: String(t.maxSlots),
+      prizePool: String(t.prizePool),
+      entryFee: String(t.entryFee),
+      perKillPrize: String(t.perKillPrize ?? 0),
+      bannerUrl: t.bannerUrl ?? "",
+    });
+    setActiveTab("create");
+    toast({ title: "Details copied!", description: "Review and set a new start time, then click Create." });
   };
 
   const handleBan = (userId: number) => {
@@ -421,7 +439,7 @@ export default function Admin() {
         <Card className="bg-card/50 border-yellow-500/30"><CardContent className="p-6"><ShieldAlert className="h-6 w-6 text-yellow-500 mb-2 opacity-80" /><p className="text-sm text-muted-foreground font-mono">Pending Verifications</p><p className="text-2xl font-bold font-display text-yellow-500">{stats?.pendingPayments || 0}</p></CardContent></Card>
       </div>
 
-      <Tabs defaultValue="tournaments" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-7">
           {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"],["results","Results"],["settings","Settings"]].map(([val, label]) => (
             <TabsTrigger key={val} value={val} className="font-mono uppercase text-xs py-2.5 rounded-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:shadow-none border border-transparent data-[state=active]:border-primary/50">
@@ -492,6 +510,7 @@ export default function Admin() {
                       <Button size="sm" variant="outline" className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 font-mono text-xs h-8" onClick={() => setPlayersTournament(t)}><Eye className="h-3 w-3 mr-1" /> Players</Button>
                       <Button size="sm" variant="outline" className="border-primary/40 text-primary hover:bg-primary/10 font-mono text-xs h-8" onClick={() => openEdit(t)}><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
                       <Button size="sm" variant="outline" className="border-secondary/40 text-secondary hover:bg-secondary/10 font-mono text-xs h-8" onClick={() => { setRoomTournament(t); setRoomForm({ roomId: t.roomId ?? "", roomPassword: t.roomPassword ?? "", perKillPrize: String(t.perKillPrize ?? 0) }); }}><Key className="h-3 w-3 mr-1" /> Room</Button>
+                      <Button size="sm" variant="outline" className="border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 font-mono text-xs h-8" onClick={() => handleCopyTournament(t)}><Copy className="h-3 w-3 mr-1" /> Copy</Button>
                       <Button size="sm" variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10 font-mono text-xs h-8" onClick={() => setDeleteTournament(t)}><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>
                     </div>
                   </div>
