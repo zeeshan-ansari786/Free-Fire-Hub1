@@ -161,6 +161,37 @@ function useCreateTournamentDirect() {
   });
 }
 
+type LeaderboardEntry = {
+  rank: number | null;
+  user: { id: number; inGameName: string; freeFireUid: string; username: string; email: string; isBanned: boolean; walletBalance: number; matchesPlayed: number; totalEarnings: number; globalRank: number | null };
+  totalPoints: number; totalKills: number; matchesPlayed: number; totalEarnings: number;
+};
+
+function useAdminLeaderboard(enabled = true) {
+  return useQuery<LeaderboardEntry[]>({
+    queryKey: ["admin-leaderboard"],
+    queryFn: () => customFetch<LeaderboardEntry[]>("/api/admin/leaderboard", { method: "GET" }),
+    enabled,
+  });
+}
+
+function useUpdateLeaderboardPlayer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, data }: { userId: number; data: { matchesPlayed?: number; totalEarnings?: number; globalRank?: number } }) =>
+      customFetch(`/api/admin/leaderboard/${userId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-leaderboard"] }); qc.invalidateQueries({ queryKey: ["admin-users"] }); },
+  });
+}
+
+function useRemoveFromLeaderboard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) => customFetch(`/api/admin/leaderboard/${userId}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-leaderboard"] }); qc.invalidateQueries({ queryKey: ["admin-users"] }); },
+  });
+}
+
 const statusColor: Record<string, string> = { upcoming: "text-primary border-primary/30", ongoing: "text-secondary border-secondary/30", completed: "text-muted-foreground border-border" };
 const payStatusColor: Record<string, string> = { verified: "text-secondary", free: "text-secondary", pending: "text-yellow-500", rejected: "text-destructive" };
 
@@ -205,6 +236,8 @@ export default function Admin() {
   const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", perKillPrize: "0", bannerUrl: "" });
   const [deleteTournament, setDeleteTournament] = useState<Tournament | null>(null);
   const [activeTab, setActiveTab] = useState("tournaments");
+  const [lbEditRow, setLbEditRow] = useState<{ userId: number; matchesPlayed: string; totalEarnings: string; globalRank: string } | null>(null);
+  const [lbRemoveUserId, setLbRemoveUserId] = useState<number | null>(null);
   const [resultsTournamentId, setResultsTournamentId] = useState<number | null>(null);
   const [resultRows, setResultRows] = useState<Array<{ userId: number; inGameName: string; kills: number; placement: number; prize: number }>>([]);
   const [playerDetailUser, setPlayerDetailUser] = useState<UserEntry | null>(null);
@@ -238,6 +271,9 @@ export default function Admin() {
   const { mutate: uploadBanner, isPending: isUploadingBanner } = useUploadBannerImage();
   const { data: resultsRegistrations, isLoading: resultsRegsLoading } = useTournamentRegistrations(resultsTournamentId);
   const { mutate: postLeaderboard, isPending: isPostingLeaderboard } = usePostLeaderboard();
+  const { data: adminLeaderboard, isLoading: lbLoading } = useAdminLeaderboard(!!user?.isAdmin);
+  const { mutate: updateLbPlayer, isPending: isUpdatingLb } = useUpdateLeaderboardPlayer();
+  const { mutate: removeFromLb, isPending: isRemovingLb } = useRemoveFromLeaderboard();
   const deleteTournamentRef = { current: deleteTournament };
   const { mutate: deleteTournamentMutate, isPending: isDeleting } = useMutation({
     mutationFn: (id: number) => customFetch(`/api/tournaments/${id}`, { method: "DELETE" }),
@@ -440,8 +476,8 @@ export default function Admin() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-7">
-          {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"],["results","Results"],["settings","Settings"]].map(([val, label]) => (
+        <TabsList className="bg-card/80 border border-border/50 rounded-none h-auto p-1 grid grid-cols-8">
+          {[["verifications","Verifications"],["tournaments","Tournaments"],["create","Create"],["users","Players"],["financial","Financial"],["results","Results"],["leaderboard","Leaderboard"],["settings","Settings"]].map(([val, label]) => (
             <TabsTrigger key={val} value={val} className="font-mono uppercase text-xs py-2.5 rounded-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:shadow-none border border-transparent data-[state=active]:border-primary/50">
               {label}
             </TabsTrigger>
@@ -856,6 +892,98 @@ export default function Admin() {
           </Card>
         </TabsContent>
 
+        {/* LEADERBOARD MANAGEMENT */}
+        <TabsContent value="leaderboard" className="mt-6 space-y-4">
+          <Card className="bg-card/50 border-primary/30">
+            <CardHeader>
+              <CardTitle className="font-display uppercase tracking-wider text-xl text-primary flex items-center gap-2">
+                <Trophy className="h-5 w-5" /> Leaderboard Management
+              </CardTitle>
+              <p className="text-xs font-mono text-muted-foreground">Add, edit or remove players from the global leaderboard. Total players shown on homepage: minimum 300.</p>
+            </CardHeader>
+            <CardContent>
+              {lbLoading ? (
+                <div className="space-y-2">{[1,2,3,4,5].map(i => <div key={i} className="h-10 bg-border/20 rounded animate-pulse" />)}</div>
+              ) : !adminLeaderboard?.length ? (
+                <p className="text-center font-mono text-muted-foreground py-8">No players found.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="font-mono text-xs">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead>Player</TableHead>
+                        <TableHead className="w-16">Kills</TableHead>
+                        <TableHead className="w-16">Points</TableHead>
+                        <TableHead className="w-20">Matches</TableHead>
+                        <TableHead className="w-24">Earnings</TableHead>
+                        <TableHead className="w-20">Global Rank</TableHead>
+                        <TableHead className="text-right w-32">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminLeaderboard.map((entry) => (
+                        <TableRow key={entry.user.id} className={lbEditRow?.userId === entry.user.id ? "bg-primary/5" : ""}>
+                          <TableCell className="text-muted-foreground">{entry.rank ?? "—"}</TableCell>
+                          <TableCell>
+                            <div className="font-bold text-foreground">{entry.user.inGameName || entry.user.username}</div>
+                            <div className="text-muted-foreground text-[10px]">{entry.user.freeFireUid || entry.user.email}</div>
+                          </TableCell>
+                          <TableCell className="text-blue-400">{entry.totalKills}</TableCell>
+                          <TableCell className="text-primary">{entry.totalPoints}</TableCell>
+                          {lbEditRow?.userId === entry.user.id ? (
+                            <>
+                              <TableCell>
+                                <Input type="number" min="0" value={lbEditRow.matchesPlayed} onChange={e => setLbEditRow(r => r ? { ...r, matchesPlayed: e.target.value } : r)} className="h-7 w-16 bg-background/50 border-border/50 text-xs" />
+                              </TableCell>
+                              <TableCell>
+                                <Input type="number" min="0" value={lbEditRow.totalEarnings} onChange={e => setLbEditRow(r => r ? { ...r, totalEarnings: e.target.value } : r)} className="h-7 w-20 bg-background/50 border-border/50 text-xs" />
+                              </TableCell>
+                              <TableCell>
+                                <Input type="number" min="1" value={lbEditRow.globalRank} onChange={e => setLbEditRow(r => r ? { ...r, globalRank: e.target.value } : r)} className="h-7 w-16 bg-background/50 border-border/50 text-xs" />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-1 justify-end">
+                                  <Button size="sm" className="h-7 px-2 bg-secondary hover:bg-secondary/90 text-secondary-foreground text-xs" disabled={isUpdatingLb}
+                                    onClick={() => {
+                                      updateLbPlayer({ userId: lbEditRow.userId, data: { matchesPlayed: parseInt(lbEditRow.matchesPlayed)||0, totalEarnings: parseInt(lbEditRow.totalEarnings)||0, globalRank: parseInt(lbEditRow.globalRank)||undefined } }, {
+                                        onSuccess: () => { toast({ title: "Player updated!" }); setLbEditRow(null); },
+                                        onError: () => toast({ title: "Update failed", variant: "destructive" }),
+                                      });
+                                    }}>Save</Button>
+                                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-border/50" onClick={() => setLbEditRow(null)}>✕</Button>
+                                </div>
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell>{entry.matchesPlayed}</TableCell>
+                              <TableCell className="text-secondary">₹{entry.totalEarnings}</TableCell>
+                              <TableCell className="text-yellow-400 font-bold">{entry.rank ?? "—"}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-1 justify-end">
+                                  <Button size="sm" variant="outline" className="h-7 px-2 border-primary/40 text-primary hover:bg-primary/10 text-xs"
+                                    onClick={() => setLbEditRow({ userId: entry.user.id, matchesPlayed: String(entry.matchesPlayed), totalEarnings: String(entry.totalEarnings), globalRank: String(entry.rank ?? "") })}>
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-7 px-2 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs" disabled={isRemovingLb}
+                                    onClick={() => setLbRemoveUserId(entry.user.id)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* SETTINGS */}
         <TabsContent value="settings" className="mt-6 space-y-6">
           {/* UPI Config */}
@@ -971,6 +1099,34 @@ export default function Admin() {
             <div className="flex gap-3 pt-2">
               <Button variant="outline" className="flex-1 border-border/50" onClick={() => setEditTournament(null)}>Cancel</Button>
               <Button onClick={handleEditSave} disabled={isUpdating} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest">{isUpdating ? "Saving..." : "Save Changes"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Player from Leaderboard Dialog */}
+      <Dialog open={lbRemoveUserId !== null} onOpenChange={open => !open && setLbRemoveUserId(null)}>
+        <DialogContent className="bg-card border-destructive/40 max-w-sm">
+          <DialogHeader><DialogTitle className="font-display uppercase tracking-wider text-destructive flex items-center gap-2"><AlertTriangle className="h-5 w-5" /> Remove from Leaderboard</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            {lbRemoveUserId !== null && (() => {
+              const entry = adminLeaderboard?.find(e => e.user.id === lbRemoveUserId);
+              return (
+                <div className="bg-destructive/10 border border-destructive/30 rounded p-3 space-y-1">
+                  <p className="font-bold font-display uppercase text-sm">{entry?.user.inGameName || entry?.user.username}</p>
+                  <p className="text-xs font-mono text-muted-foreground">UID: {entry?.user.freeFireUid || "N/A"} · {entry?.matchesPlayed} matches</p>
+                </div>
+              );
+            })()}
+            <p className="text-sm font-mono text-muted-foreground">This will delete all leaderboard entries for this player and reset their stats (matches, earnings, rank). This cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 border-border/50" onClick={() => setLbRemoveUserId(null)}>Cancel</Button>
+              <Button disabled={isRemovingLb} onClick={() => lbRemoveUserId !== null && removeFromLb(lbRemoveUserId, {
+                onSuccess: () => { toast({ title: "Player removed from leaderboard" }); setLbRemoveUserId(null); },
+                onError: () => toast({ title: "Failed to remove player", variant: "destructive" }),
+              })} className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold uppercase tracking-widest">
+                {isRemovingLb ? "Removing..." : "Remove"}
+              </Button>
             </div>
           </div>
         </DialogContent>

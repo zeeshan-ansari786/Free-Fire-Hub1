@@ -1,9 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db, leaderboardTable, usersTable, tournamentsTable } from "@workspace/db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, isNotNull } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
+
+const MIN_DISPLAYED_PLAYERS = 300;
 
 function formatUser(user: typeof usersTable.$inferSelect) {
   const { passwordHash: _, ...safeUser } = user;
@@ -20,6 +22,13 @@ function getRankPoints(placement: number): number {
   if (placement <= 10) return 2;
   if (placement <= 15) return 1;
   return 0;
+}
+
+async function recalculateGlobalRanks() {
+  const allUsers = await db.select().from(usersTable).orderBy(desc(usersTable.totalEarnings));
+  for (let i = 0; i < allUsers.length; i++) {
+    await db.update(usersTable).set({ globalRank: i + 1 }).where(eq(usersTable.id, allUsers[i].id));
+  }
 }
 
 router.get("/tournaments/:id/leaderboard", async (req, res): Promise<void> => {
@@ -60,10 +69,8 @@ router.post("/tournaments/:id/leaderboard", requireAdmin, async (req, res): Prom
     return;
   }
 
-  // Delete existing leaderboard for this tournament
   await db.delete(leaderboardTable).where(eq(leaderboardTable.tournamentId, id));
 
-  // Calculate points: rank bonus (12/8/6/4/2/1 by placement) + 1pt per kill
   const sorted = entries
     .map((entry) => {
       const rankPts = getRankPoints(entry.placement);
@@ -84,7 +91,6 @@ router.post("/tournaments/:id/leaderboard", requireAdmin, async (req, res): Prom
 
   const inserted = await db.insert(leaderboardTable).values(insertData).returning();
 
-  // Update player stats (matchesPlayed, totalEarnings, globalRank)
   for (const entry of inserted) {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, entry.userId));
     if (user) {
@@ -95,11 +101,7 @@ router.post("/tournaments/:id/leaderboard", requireAdmin, async (req, res): Prom
     }
   }
 
-  // Recalculate global ranks
-  const allUsers = await db.select().from(usersTable).orderBy(desc(usersTable.totalEarnings));
-  for (let i = 0; i < allUsers.length; i++) {
-    await db.update(usersTable).set({ globalRank: i + 1 }).where(eq(usersTable.id, allUsers[i].id));
-  }
+  await recalculateGlobalRanks();
 
   const results = await Promise.all(inserted.map(async (entry) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, entry.userId));
@@ -130,7 +132,8 @@ router.get("/leaderboard/stats", async (req, res): Promise<void> => {
     }
   }
 
-  res.json({ totalPlayers: Number(totalPlayers), topKiller });
+  const displayedPlayers = Math.max(Number(totalPlayers), MIN_DISPLAYED_PLAYERS);
+  res.json({ totalPlayers: displayedPlayers, topKiller });
 });
 
 router.get("/leaderboard/global", async (req, res): Promise<void> => {
@@ -167,6 +170,73 @@ router.get("/leaderboard/global", async (req, res): Promise<void> => {
   }));
 
   res.json({ players: results, total: Number(count), page: pageNum, limit: limitNum });
+});
+
+// ── Admin leaderboard management ──────────────────────────────────────────────
+
+router.get("/admin/leaderboard", requireAdmin, async (req, res): Promise<void> => {
+  const users = await db.select().from(usersTable).orderBy(usersTable.globalRank);
+
+  const results = await Promise.all(users.map(async (user) => {
+    const killRows = await db.select({ total: sql<number>`sum(kills)` })
+      .from(leaderboardTable).where(eq(leaderboardTable.userId, user.id));
+    const pointRows = await db.select({ total: sql<number>`sum(total_points)` })
+      .from(leaderboardTable).where(eq(leaderboardTable.userId, user.id));
+
+    return {
+      rank: user.globalRank,
+      user: formatUser(user),
+      totalPoints: Number(pointRows[0]?.total ?? 0),
+      totalKills: Number(killRows[0]?.total ?? 0),
+      matchesPlayed: user.matchesPlayed,
+      totalEarnings: user.totalEarnings,
+    };
+  }));
+
+  res.json(results);
+});
+
+router.put("/admin/leaderboard/:userId", requireAdmin, async (req, res): Promise<void> => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
+
+  const { matchesPlayed, totalEarnings, globalRank } = req.body as {
+    matchesPlayed?: number; totalEarnings?: number; globalRank?: number;
+  };
+
+  const updates: Record<string, number> = {};
+  if (matchesPlayed !== undefined) updates.matchesPlayed = matchesPlayed;
+  if (totalEarnings !== undefined) updates.totalEarnings = totalEarnings;
+  if (globalRank !== undefined) updates.globalRank = globalRank;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "Nothing to update" }); return;
+  }
+
+  await db.update(usersTable).set(updates).where(eq(usersTable.id, userId));
+
+  if (globalRank === undefined) {
+    await recalculateGlobalRanks();
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  res.json({ message: "Player stats updated", user: formatUser(user!) });
+});
+
+router.delete("/admin/leaderboard/:userId", requireAdmin, async (req, res): Promise<void> => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
+
+  await db.delete(leaderboardTable).where(eq(leaderboardTable.userId, userId));
+  await db.update(usersTable).set({
+    matchesPlayed: 0,
+    totalEarnings: 0,
+    globalRank: null,
+  }).where(eq(usersTable.id, userId));
+
+  await recalculateGlobalRanks();
+
+  res.json({ message: "Player removed from leaderboard" });
 });
 
 export default router;
