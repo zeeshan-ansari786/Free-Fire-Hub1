@@ -231,7 +231,6 @@ router.delete("/admin/leaderboard/:userId", requireAdmin, async (req, res): Prom
   await db.update(usersTable).set({
     matchesPlayed: 0,
     totalEarnings: 0,
-    globalRank: null,
   }).where(eq(usersTable.id, userId));
 
   await recalculateGlobalRanks();
