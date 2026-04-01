@@ -153,6 +153,38 @@ router.post("/admin/financial/:id/approve", requireAdmin, async (req, res): Prom
   res.json({ message: `${txn.type === "deposit" ? "Deposit" : "Withdrawal"} ${action}d` });
 });
 
+// Adjust wallet balance for a user
+router.post("/admin/users/:id/wallet", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
+
+  const { amount, type, reason } = req.body;
+  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) { res.status(400).json({ error: "Invalid amount" }); return; }
+  if (!["credit", "debit"].includes(type)) { res.status(400).json({ error: "Type must be credit or debit" }); return; }
+
+  const numAmount = Number(amount);
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (type === "debit" && user.walletBalance < numAmount) {
+    res.status(400).json({ error: "Insufficient wallet balance to deduct", balance: user.walletBalance }); return;
+  }
+
+  const newBalance = type === "credit" ? user.walletBalance + numAmount : user.walletBalance - numAmount;
+  await db.update(usersTable).set({ walletBalance: newBalance }).where(eq(usersTable.id, id));
+
+  await db.insert(transactionsTable).values({
+    userId: id,
+    type: type === "credit" ? "deposit" : "withdrawal",
+    amount: numAmount,
+    status: "completed",
+    description: `[Admin Adjustment] ${reason || "Manual adjustment"}`,
+  });
+
+  res.json({ message: `₹${numAmount} ${type === "credit" ? "credited to" : "deducted from"} wallet`, newBalance });
+});
+
 // Get registrations for a tournament (room management)
 router.get("/admin/tournaments/:id/players", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);

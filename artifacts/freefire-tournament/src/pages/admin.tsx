@@ -138,6 +138,17 @@ function usePostLeaderboard() {
     },
   });
 }
+function useAdjustWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, amount, type, reason }: { userId: number; amount: number; type: "credit" | "debit"; reason: string }) =>
+      customFetch<{ message: string; newBalance: number }>(`/api/admin/users/${userId}/wallet`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, type, reason }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
+  });
+}
 function useCreateTournamentDirect() {
   const qc = useQueryClient();
   return useMutation({
@@ -177,6 +188,8 @@ export default function Admin() {
   const [createForm, setCreateForm] = useState({ title: "", description: "", startDateTime: "", mapName: "Bermuda", gameMode: "squad", maxSlots: "100", prizePool: "0", entryFee: "0", bannerUrl: "" });
   const [resultsTournamentId, setResultsTournamentId] = useState<number | null>(null);
   const [resultRows, setResultRows] = useState<Array<{ userId: number; inGameName: string; kills: number; placement: number; prize: number }>>([]);
+  const [playerDetailUser, setPlayerDetailUser] = useState<UserEntry | null>(null);
+  const [walletAdjust, setWalletAdjust] = useState({ amount: "", reason: "", type: "credit" as "credit" | "debit" });
   const [upiForm, setUpiForm] = useState({ upiId: "", upiName: "" });
   const [qrPreview, setQrPreview] = useState<string | null>(null);
   const [qrFile, setQrFile] = useState<File | null>(null);
@@ -200,6 +213,7 @@ export default function Admin() {
   const { mutate: banUser } = useBanUser();
   const { mutate: approveWithdrawal } = useApproveWithdrawal();
   const { mutate: kickPlayer, isPending: isKicking } = useKickPlayer();
+  const { mutate: adjustWallet, isPending: isAdjustingWallet } = useAdjustWallet();
   const { mutate: updateConfig, isPending: isUpdatingConfig } = useUpdateAdminConfig();
   const { mutate: uploadQr, isPending: isUploadingQr } = useUploadQrCode();
   const { mutate: uploadBanner, isPending: isUploadingBanner } = useUploadBannerImage();
@@ -269,6 +283,20 @@ export default function Admin() {
     banUser(userId, {
       onSuccess: (data) => toast({ title: data.message }),
       onError: () => toast({ title: "Failed to update user", variant: "destructive" }),
+    });
+  };
+
+  const handleAdjustWallet = () => {
+    if (!playerDetailUser) return;
+    const amt = parseFloat(walletAdjust.amount);
+    if (!amt || amt <= 0) { toast({ title: "Enter a valid amount", variant: "destructive" }); return; }
+    adjustWallet({ userId: playerDetailUser.id, amount: amt, type: walletAdjust.type, reason: walletAdjust.reason }, {
+      onSuccess: (data) => {
+        toast({ title: walletAdjust.type === "credit" ? "Amount Added" : "Amount Deducted", description: data.message });
+        setWalletAdjust({ amount: "", reason: "", type: "credit" });
+        setPlayerDetailUser(prev => prev ? { ...prev, walletBalance: data.newBalance } : null);
+      },
+      onError: (err: any) => toast({ title: "Wallet adjustment failed", description: err?.data?.error || "An error occurred", variant: "destructive" }),
     });
   };
 
@@ -540,20 +568,25 @@ export default function Admin() {
               ) : (
                 <div className="overflow-x-auto">
                   <Table className="font-mono">
-                    <TableHeader><TableRow><TableHead>Player</TableHead><TableHead>UID</TableHead><TableHead className="text-right">Wallet</TableHead><TableHead className="text-right">Matches</TableHead><TableHead>Joined</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Player</TableHead><TableHead>UID</TableHead><TableHead className="text-right">Wallet</TableHead><TableHead className="text-right">Earnings</TableHead><TableHead className="text-right">Matches</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {adminUsers.filter(u => !u.isAdmin).map(u => (
                         <TableRow key={u.id} className={u.isBanned ? "opacity-50" : ""}>
                           <TableCell><span className="block font-bold">{u.inGameName}</span><span className="text-xs text-muted-foreground">{u.email}</span></TableCell>
                           <TableCell className="text-muted-foreground text-xs">{u.freeFireUid}</TableCell>
                           <TableCell className="text-right text-secondary font-bold">₹{u.walletBalance}</TableCell>
+                          <TableCell className="text-right text-muted-foreground font-mono">₹{u.totalEarnings}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{u.matchesPlayed}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{format(new Date(u.createdAt), "MMM d, yyyy")}</TableCell>
                           <TableCell>{u.isBanned ? <span className="text-xs text-destructive border border-destructive/30 px-2 py-0.5 rounded">BANNED</span> : <span className="text-xs text-secondary border border-secondary/30 px-2 py-0.5 rounded">ACTIVE</span>}</TableCell>
                           <TableCell className="text-right">
-                            <Button size="sm" variant="outline" className={`h-8 px-3 text-xs font-mono ${u.isBanned ? "border-secondary/50 text-secondary hover:bg-secondary/10" : "border-destructive/50 text-destructive hover:bg-destructive/10"}`} onClick={() => handleBan(u.id)}>
-                              <Ban className="h-3 w-3 mr-1" /> {u.isBanned ? "Unban" : "Ban"}
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" className="h-8 px-3 text-xs font-mono border-primary/50 text-primary hover:bg-primary/10" onClick={() => { setPlayerDetailUser(u); setWalletAdjust({ amount: "", reason: "", type: "credit" }); }}>
+                                <Eye className="h-3 w-3 mr-1" /> View
+                              </Button>
+                              <Button size="sm" variant="outline" className={`h-8 px-3 text-xs font-mono ${u.isBanned ? "border-secondary/50 text-secondary hover:bg-secondary/10" : "border-destructive/50 text-destructive hover:bg-destructive/10"}`} onClick={() => handleBan(u.id)}>
+                                <Ban className="h-3 w-3 mr-1" /> {u.isBanned ? "Unban" : "Ban"}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -672,7 +705,7 @@ export default function Admin() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <p className="text-xs font-mono text-muted-foreground">Enter each player's stats. Placement 1 = Booyah (wins +12 pts). Points auto-calculated.</p>
+                      <p className="text-xs font-mono text-muted-foreground">Enter placement (1 = 🏆 Booyah, +12 pts). Leave blank = not placed. Points = placement bonus + kills.</p>
                       <div className="overflow-x-auto">
                         <Table className="font-mono">
                           <TableHeader>
@@ -691,16 +724,16 @@ export default function Admin() {
                                 <TableRow key={row.userId}>
                                   <TableCell className="font-bold">{row.inGameName}</TableCell>
                                   <TableCell>
-                                    <Select value={row.placement.toString()} onValueChange={val => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, placement: parseInt(val) } : r))}>
-                                      <SelectTrigger className="h-8 bg-background/50 border-border/50 text-xs"><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="1">🏆 1st (Booyah)</SelectItem>
-                                        <SelectItem value="2">2nd</SelectItem>
-                                        <SelectItem value="3">3rd</SelectItem>
-                                        {[4,5,6,7,8,9,10,11,12].map(n => <SelectItem key={n} value={n.toString()}>{n}th</SelectItem>)}
-                                        <SelectItem value="99">Not Placed</SelectItem>
-                                      </SelectContent>
-                                    </Select>
+                                    <div className="flex items-center gap-1 w-28">
+                                      <Input
+                                        type="number" min="1" max="99"
+                                        value={row.placement === 99 ? "" : row.placement}
+                                        onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, placement: parseInt(e.target.value) || 99 } : r))}
+                                        placeholder="—"
+                                        className="h-8 bg-background/50 border-border/50 text-xs w-16"
+                                      />
+                                      {row.placement === 1 && <span className="text-xs">🏆</span>}
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <Input type="number" min="0" value={row.kills} onChange={e => setResultRows(prev => prev.map((r, idx) => idx === i ? { ...r, kills: parseInt(e.target.value) || 0 } : r))} className="h-8 bg-background/50 border-border/50 text-xs w-20" />
@@ -925,6 +958,120 @@ export default function Admin() {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Player Detail & Wallet Adjustment Dialog */}
+      <Dialog open={!!playerDetailUser} onOpenChange={open => !open && setPlayerDetailUser(null)}>
+        <DialogContent className="bg-card border-primary/30 max-w-lg">
+          <DialogHeader><DialogTitle className="font-display uppercase tracking-wider text-primary flex items-center gap-2"><Eye className="h-5 w-5" /> Player Details</DialogTitle></DialogHeader>
+          {playerDetailUser && (
+            <div className="space-y-5 pt-1">
+              {/* Profile info */}
+              <div className="grid grid-cols-2 gap-3 font-mono text-sm">
+                <div className="bg-background/40 border border-border/30 rounded p-3 col-span-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-lg text-foreground">{playerDetailUser.inGameName}</p>
+                      <p className="text-xs text-muted-foreground">{playerDetailUser.email}</p>
+                    </div>
+                    <span className={`text-xs font-mono px-2 py-1 border rounded ${playerDetailUser.isBanned ? "text-destructive border-destructive/40" : "text-secondary border-secondary/40"}`}>
+                      {playerDetailUser.isBanned ? "BANNED" : "ACTIVE"}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-background/40 border border-border/30 rounded p-3">
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Free Fire UID</p>
+                  <p className="font-bold text-primary">{playerDetailUser.freeFireUid}</p>
+                </div>
+                <div className="bg-background/40 border border-border/30 rounded p-3">
+                  <p className="text-xs text-muted-foreground uppercase mb-1">WhatsApp</p>
+                  <p className="font-bold">{playerDetailUser.whatsappNumber || "—"}</p>
+                </div>
+                <div className="bg-background/40 border border-border/30 rounded p-3">
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Wallet Balance</p>
+                  <p className="font-bold text-secondary text-lg">₹{playerDetailUser.walletBalance}</p>
+                </div>
+                <div className="bg-background/40 border border-border/30 rounded p-3">
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Total Earnings</p>
+                  <p className="font-bold text-primary text-lg">₹{playerDetailUser.totalEarnings}</p>
+                </div>
+                <div className="bg-background/40 border border-border/30 rounded p-3">
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Matches Played</p>
+                  <p className="font-bold text-xl">{playerDetailUser.matchesPlayed}</p>
+                </div>
+                <div className="bg-background/40 border border-border/30 rounded p-3">
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Joined</p>
+                  <p className="font-bold">{format(new Date(playerDetailUser.createdAt), "MMM d, yyyy")}</p>
+                </div>
+              </div>
+
+              {/* Wallet Adjustment */}
+              <div className="border border-secondary/30 rounded-lg p-4 space-y-3 bg-secondary/5">
+                <p className="font-display uppercase tracking-wider text-sm text-secondary flex items-center gap-2"><IndianRupee className="h-4 w-4" /> Wallet Adjustment</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label className="font-mono text-xs uppercase text-muted-foreground">Amount (₹)</Label>
+                    <Input
+                      type="number" min="1" step="1"
+                      value={walletAdjust.amount}
+                      onChange={e => setWalletAdjust(w => ({ ...w, amount: e.target.value }))}
+                      placeholder="Enter amount..."
+                      className="bg-background/50 border-border/50 font-mono mt-1"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="font-mono text-xs uppercase text-muted-foreground">Reason</Label>
+                    <Input
+                      value={walletAdjust.reason}
+                      onChange={e => setWalletAdjust(w => ({ ...w, reason: e.target.value }))}
+                      placeholder="e.g. Prize bonus, correction..."
+                      className="bg-background/50 border-border/50 font-mono mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    disabled={isAdjustingWallet || !walletAdjust.amount}
+                    className="flex-1 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest text-xs h-9"
+                    onClick={() => {
+                      const amt = parseFloat(walletAdjust.amount);
+                      if (!amt || amt <= 0) { toast({ title: "Enter a valid amount", variant: "destructive" }); return; }
+                      adjustWallet({ userId: playerDetailUser.id, amount: amt, type: "credit", reason: walletAdjust.reason }, {
+                        onSuccess: (data) => {
+                          toast({ title: "Amount Added", description: data.message });
+                          setWalletAdjust({ amount: "", reason: "", type: "credit" });
+                          setPlayerDetailUser(prev => prev ? { ...prev, walletBalance: data.newBalance } : null);
+                        },
+                        onError: (err: any) => toast({ title: "Failed", description: err?.data?.error || "Error", variant: "destructive" }),
+                      });
+                    }}
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add Money
+                  </Button>
+                  <Button
+                    disabled={isAdjustingWallet || !walletAdjust.amount}
+                    variant="outline"
+                    className="flex-1 border-destructive/50 text-destructive hover:bg-destructive/10 font-bold uppercase tracking-widest text-xs h-9"
+                    onClick={() => {
+                      const amt = parseFloat(walletAdjust.amount);
+                      if (!amt || amt <= 0) { toast({ title: "Enter a valid amount", variant: "destructive" }); return; }
+                      adjustWallet({ userId: playerDetailUser.id, amount: amt, type: "debit", reason: walletAdjust.reason }, {
+                        onSuccess: (data) => {
+                          toast({ title: "Amount Deducted", description: data.message });
+                          setWalletAdjust({ amount: "", reason: "", type: "credit" });
+                          setPlayerDetailUser(prev => prev ? { ...prev, walletBalance: data.newBalance } : null);
+                        },
+                        onError: (err: any) => toast({ title: "Failed", description: err?.data?.error || "Error", variant: "destructive" }),
+                      });
+                    }}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" /> Deduct Money
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
