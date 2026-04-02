@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2, Trash2, AlertTriangle, Copy } from "lucide-react";
+import { ShieldAlert, Users, Trophy, IndianRupee, CheckCircle, XCircle, Pencil, Key, Plus, Swords, Ban, ArrowUpCircle, ArrowDownCircle, UserX, Eye, Settings, QrCode, Smartphone, Upload, Loader2, Trash2, AlertTriangle, Copy, Instagram, MessageCircle } from "lucide-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
 
@@ -50,7 +50,7 @@ type FinancialData = {
   totalDeposits: number; depositCount: number; totalWithdrawals: number; withdrawalCount: number;
   pendingWithdrawals: PendingTxn[]; pendingDeposits: PendingTxn[];
 };
-type AdminPaymentConfig = { upiId: string; upiName: string; qrCodeUrl: string | null; whatsappConfigured: boolean; whatsappApiKey: string | null };
+type AdminPaymentConfig = { upiId: string; upiName: string; qrCodeUrl: string | null; whatsappConfigured: boolean; whatsappApiKey: string | null; supportInstagram: string; supportWhatsapp: string };
 
 function useAdminConfig(enabled = true) {
   return useQuery({ queryKey: ["admin-config"], queryFn: () => customFetch<AdminPaymentConfig>("/api/admin/config", { method: "GET" }), enabled });
@@ -58,9 +58,9 @@ function useAdminConfig(enabled = true) {
 function useUpdateAdminConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { upiId?: string; upiName?: string; whatsappApiKey?: string }) =>
+    mutationFn: (data: { upiId?: string; upiName?: string; whatsappApiKey?: string; supportInstagram?: string; supportWhatsapp?: string }) =>
       customFetch<{ message: string }>("/api/admin/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-config"] }); qc.invalidateQueries({ queryKey: ["payment-config"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-config"] }); qc.invalidateQueries({ queryKey: ["payment-config"] }); qc.invalidateQueries({ queryKey: ["support-config"] }); },
   });
 }
 function useUploadQrCode() {
@@ -253,6 +253,7 @@ export default function Admin() {
   const [walletAdjust, setWalletAdjust] = useState({ amount: "", reason: "", type: "credit" as "credit" | "debit" });
   const [upiForm, setUpiForm] = useState({ upiId: "", upiName: "" });
   const [whatsappApiKey, setWhatsappApiKey] = useState("");
+  const [supportForm, setSupportForm] = useState({ instagram: "", whatsapp: "" });
   const [qrPreview, setQrPreview] = useState<string | null>(null);
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -433,6 +434,23 @@ export default function Admin() {
     updateConfig({ upiId: upiForm.upiId || adminConfig?.upiId, upiName: upiForm.upiName || adminConfig?.upiName }, {
       onSuccess: () => toast({ title: "Payment config updated!" }),
       onError: () => toast({ title: "Failed to update config", variant: "destructive" }),
+    });
+  };
+
+  const handleSaveSupport = () => {
+    const ig = supportForm.instagram.trim().replace(/^@/, "");
+    const wa = supportForm.whatsapp.trim().replace(/\D/g, "");
+    if (ig && !/^[a-zA-Z0-9._]{1,30}$/.test(ig)) {
+      toast({ title: "Invalid Instagram username", description: "Use only letters, numbers, dots, underscores (max 30 chars).", variant: "destructive" });
+      return;
+    }
+    if (wa && !/^\d{10,15}$/.test(wa)) {
+      toast({ title: "Invalid WhatsApp number", description: "Include country code, digits only (e.g. 917777915823).", variant: "destructive" });
+      return;
+    }
+    updateConfig({ supportInstagram: ig || adminConfig?.supportInstagram, supportWhatsapp: wa || adminConfig?.supportWhatsapp }, {
+      onSuccess: () => { toast({ title: "Support contacts updated!" }); setSupportForm({ instagram: "", whatsapp: "" }); },
+      onError: (err: any) => toast({ title: "Failed to update support contacts", description: err?.data?.error || "Error", variant: "destructive" }),
     });
   };
 
@@ -1126,6 +1144,68 @@ export default function Admin() {
               >
                 {isUpdatingConfig ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save WhatsApp Key"}
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Support Contact Settings */}
+          <Card className="bg-card/50 border-primary/30">
+            <CardHeader>
+              <CardTitle className="font-display uppercase tracking-wider text-xl text-primary flex items-center gap-2">
+                <span className="text-lg">🎧</span> Support Contact Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {configLoading ? <div className="h-20 bg-border/20 rounded animate-pulse" /> : (
+                <>
+                  {/* Current values */}
+                  <div className="bg-background/40 border border-border/30 rounded p-3 font-mono text-xs space-y-1.5 text-muted-foreground">
+                    <p>
+                      <span className="text-foreground font-bold">Instagram: </span>
+                      <span className="text-[#E1306C]">@{adminConfig?.supportInstagram || "—"}</span>
+                    </p>
+                    <p>
+                      <span className="text-foreground font-bold">WhatsApp: </span>
+                      <span className="text-[#25D366]">+{adminConfig?.supportWhatsapp || "—"}</span>
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="font-mono text-xs uppercase text-muted-foreground flex items-center gap-1">
+                        <Instagram className="h-3 w-3 text-[#E1306C]" /> Instagram Username
+                      </Label>
+                      <Input
+                        value={supportForm.instagram}
+                        onChange={e => setSupportForm(f => ({ ...f, instagram: e.target.value }))}
+                        placeholder={adminConfig?.supportInstagram ? `@${adminConfig.supportInstagram}` : "@username"}
+                        className="bg-background/50 border-border/50 font-mono"
+                      />
+                      <p className="text-[10px] font-mono text-muted-foreground">Letters, numbers, dots, underscores — no @ needed</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="font-mono text-xs uppercase text-muted-foreground flex items-center gap-1">
+                        <MessageCircle className="h-3 w-3 text-[#25D366]" /> WhatsApp Number
+                      </Label>
+                      <Input
+                        value={supportForm.whatsapp}
+                        onChange={e => setSupportForm(f => ({ ...f, whatsapp: e.target.value }))}
+                        placeholder={adminConfig?.supportWhatsapp || "917777915823"}
+                        className="bg-background/50 border-border/50 font-mono"
+                      />
+                      <p className="text-[10px] font-mono text-muted-foreground">With country code, digits only (e.g. 917777915823)</p>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleSaveSupport}
+                    disabled={isUpdatingConfig || (!supportForm.instagram.trim() && !supportForm.whatsapp.trim())}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest"
+                  >
+                    {isUpdatingConfig ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Support Contacts"}
+                  </Button>
+                  <p className="text-xs font-mono text-muted-foreground">Changes are reflected instantly on the Support page for all users.</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

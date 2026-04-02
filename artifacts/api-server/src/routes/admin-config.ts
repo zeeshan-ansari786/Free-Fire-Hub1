@@ -56,13 +56,27 @@ router.get("/payment-config", async (req, res): Promise<void> => {
   });
 });
 
+// GET support config (public — no auth required — used by the support page)
+router.get("/support-config", async (req, res): Promise<void> => {
+  const [instagram, whatsapp] = await Promise.all([
+    getConfig("support_instagram"),
+    getConfig("support_whatsapp"),
+  ]);
+  res.json({
+    instagram: instagram ?? "Sufi33k",
+    whatsapp: whatsapp ?? "917777915823",
+  });
+});
+
 // GET admin config (full config for admin panel)
 router.get("/admin/config", requireAdmin, async (req, res): Promise<void> => {
-  const [upiId, qrCodeUrl, upiName, whatsappApiKey] = await Promise.all([
+  const [upiId, qrCodeUrl, upiName, whatsappApiKey, supportInstagram, supportWhatsapp] = await Promise.all([
     getConfig("upi_id"),
     getConfig("qr_code_url"),
     getConfig("upi_name"),
     getConfig("whatsapp_api_key"),
+    getConfig("support_instagram"),
+    getConfig("support_whatsapp"),
   ]);
   res.json({
     upiId: upiId ?? "ffarena@upi",
@@ -70,16 +84,35 @@ router.get("/admin/config", requireAdmin, async (req, res): Promise<void> => {
     qrCodeUrl: qrCodeUrl ?? null,
     whatsappApiKey: whatsappApiKey ? "••••••••" : null,
     whatsappConfigured: !!whatsappApiKey,
+    supportInstagram: supportInstagram ?? "Sufi33k",
+    supportWhatsapp: supportWhatsapp ?? "917777915823",
   });
 });
 
-// PUT admin config (update UPI ID, name, WhatsApp API key)
+// PUT admin config (update UPI ID, name, WhatsApp API key, support contacts)
 router.put("/admin/config", requireAdmin, async (req, res): Promise<void> => {
-  const { upiId, upiName, whatsappApiKey } = req.body;
+  const { upiId, upiName, whatsappApiKey, supportInstagram, supportWhatsapp } = req.body;
   if (upiId !== undefined) await setConfig("upi_id", upiId.trim());
   if (upiName !== undefined) await setConfig("upi_name", upiName.trim());
   if (whatsappApiKey !== undefined && whatsappApiKey.trim()) {
     await setConfig("whatsapp_api_key", whatsappApiKey.trim());
+  }
+  // Validate and save support contact details
+  if (supportInstagram !== undefined) {
+    const ig = supportInstagram.trim().replace(/^@/, "");
+    if (ig && !/^[a-zA-Z0-9._]{1,30}$/.test(ig)) {
+      res.status(400).json({ error: "Invalid Instagram username. Use only letters, numbers, dots, and underscores (max 30 chars)." });
+      return;
+    }
+    if (ig) await setConfig("support_instagram", ig);
+  }
+  if (supportWhatsapp !== undefined) {
+    const wa = supportWhatsapp.trim().replace(/\D/g, "");
+    if (wa && !/^\d{10,15}$/.test(wa)) {
+      res.status(400).json({ error: "Invalid WhatsApp number. Include country code, digits only (10–15 digits, e.g. 917777915823)." });
+      return;
+    }
+    if (wa) await setConfig("support_whatsapp", wa);
   }
   res.json({ message: "Config updated" });
 });
