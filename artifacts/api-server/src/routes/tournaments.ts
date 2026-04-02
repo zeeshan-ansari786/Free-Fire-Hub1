@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, tournamentsTable, registrationsTable, usersTable, leaderboardTable } from "@workspace/db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, asc, and, sql } from "drizzle-orm";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -25,7 +25,7 @@ router.get("/tournaments", async (req, res): Promise<void> => {
   }
 
   const [tournaments, [{ count }]] = await Promise.all([
-    query.orderBy(desc(tournamentsTable.startDateTime)).limit(limitNum).offset(offset),
+    query.orderBy(asc(tournamentsTable.startDateTime)).limit(limitNum).offset(offset),
     countQuery,
   ]);
 
