@@ -93,11 +93,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
                 {/* Wallet icon + balance — always visible */}
                 <Link href="/wallet">
-                  <button className="flex flex-col items-center justify-center gap-0 px-2 py-1 rounded-lg border border-secondary/30 bg-secondary/5 hover:bg-secondary/15 transition-colors min-w-[44px]">
-                    <Wallet className="h-4 w-4 text-secondary drop-shadow-[0_0_6px_rgba(57,255,20,0.6)]" />
-                    <span className="text-[10px] font-mono font-bold text-secondary leading-tight">
-                      ₹{walletBalance.toLocaleString("en-IN")}
-                    </span>
+                  <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-secondary/40 bg-secondary/8 hover:bg-secondary/20 transition-all shadow-[0_0_10px_rgba(57,255,20,0.1)] hover:shadow-[0_0_14px_rgba(57,255,20,0.25)] min-w-[72px]">
+                    <Wallet className="h-4 w-4 text-secondary shrink-0 drop-shadow-[0_0_6px_rgba(57,255,20,0.7)]" />
+                    <div className="flex flex-col items-start leading-none">
+                      <span className="text-[9px] font-mono text-secondary/60 uppercase tracking-wider">Wallet</span>
+                      <span className="text-xs font-mono font-bold text-secondary">
+                        ₹{walletBalance.toLocaleString("en-IN")}
+                      </span>
+                    </div>
                   </button>
                 </Link>
 

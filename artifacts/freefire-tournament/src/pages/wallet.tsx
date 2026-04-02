@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import { Wallet, ArrowDownCircle, ArrowUpCircle, IndianRupee, Clock, CheckCircle, XCircle, Smartphone, QrCode, Info, Copy, Gift } from "lucide-react";
 import { format } from "date-fns";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, getGetMeQueryKey } from "@workspace/api-client-react";
 
 type Transaction = {
   id: number; type: string; amount: number; status: string; description: string; createdAt: string;
@@ -37,7 +37,10 @@ function useDeposit() {
   return useMutation({
     mutationFn: (data: { amount: number; transactionRef: string; paymentMethod: string }) =>
       customFetch<{ walletBalance: number; message: string }>("/api/wallet/deposit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallet"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    },
   });
 }
 function useWithdraw() {
@@ -45,7 +48,10 @@ function useWithdraw() {
   return useMutation({
     mutationFn: (data: { amount: number; upiId: string }) =>
       customFetch<{ walletBalance: number; message: string }>("/api/wallet/withdraw", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallet"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    },
   });
 }
 

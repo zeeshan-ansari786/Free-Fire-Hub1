@@ -4,7 +4,8 @@ import { getDefaultBanner } from "@/lib/tournament-defaults";
 import { 
   useGetTournament, getGetTournamentQueryKey, 
   useRegisterForTournament, 
-  useGetTournamentLeaderboard, getGetTournamentLeaderboardQueryKey
+  useGetTournamentLeaderboard, getGetTournamentLeaderboardQueryKey,
+  getGetMeQueryKey
 } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { format, differenceInSeconds } from "date-fns";
@@ -169,6 +170,7 @@ export default function TournamentDetail() {
           setIsRegisterOpen(false);
           try { sessionStorage.removeItem(storageKey); } catch {}
           queryClient.invalidateQueries({ queryKey: getGetTournamentQueryKey(tournamentId) });
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         },
         onError: (err: any) => {
           const errData = err?.data || err;
@@ -333,52 +335,62 @@ export default function TournamentDetail() {
                     {tournament.gameMode === "solo" && " — Solo entry"}
                   </div>
 
-                  {/* Player's own UID & IGN */}
-                  <div className="space-y-2">
+                  {/* Player roster — dynamically built from game mode */}
+                  <div className="space-y-3">
                     <Label className="font-mono text-xs uppercase text-muted-foreground flex items-center gap-1">
-                      <span className="text-secondary">★</span> Your Playing UID &amp; IGN
+                      <span className="text-secondary">★</span> Player Details
+                      <span className="ml-1 text-primary">
+                        ({tournament.gameMode === "solo" ? "1 Player" : tournament.gameMode === "duo" ? "2 Players" : "4 Players"})
+                      </span>
                     </Label>
-                    <div className="grid grid-cols-2 gap-3 p-3 bg-secondary/5 border border-secondary/30 rounded">
-                      <div>
-                        <Label className="font-mono text-xs text-muted-foreground">Your Free Fire UID</Label>
-                        <Input
-                          value={playerInfo.uid}
-                          onChange={e => setPlayerInfo(p => ({ ...p, uid: e.target.value }))}
-                          placeholder="e.g. 1234567890"
-                          className="bg-background/30 border-border/50 font-mono mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label className="font-mono text-xs text-muted-foreground">Your IGN</Label>
-                        <Input
-                          value={playerInfo.name}
-                          onChange={e => setPlayerInfo(p => ({ ...p, name: e.target.value }))}
-                          placeholder="In-Game Name"
-                          className="bg-background/30 border-border/50 font-mono mt-1"
-                        />
+
+                    {/* Owner / Player 1 */}
+                    <div className="p-3 bg-secondary/5 border border-secondary/30 rounded space-y-2">
+                      <p className="text-xs font-mono font-bold text-secondary uppercase tracking-wider">
+                        Player 1 — Owner (You)
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="font-mono text-xs text-muted-foreground">Free Fire UID</Label>
+                          <Input
+                            value={playerInfo.uid}
+                            onChange={e => setPlayerInfo(p => ({ ...p, uid: e.target.value }))}
+                            placeholder="e.g. 1234567890"
+                            className="bg-background/30 border-border/50 font-mono mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="font-mono text-xs text-muted-foreground">In-Game Name</Label>
+                          <Input
+                            value={playerInfo.name}
+                            onChange={e => setPlayerInfo(p => ({ ...p, name: e.target.value }))}
+                            placeholder="Your IGN"
+                            className="bg-background/30 border-border/50 font-mono mt-1"
+                          />
+                        </div>
                       </div>
                     </div>
-                    <p className="text-xs font-mono text-muted-foreground">You can change your UID/IGN here if you're playing on a different account.</p>
-                  </div>
 
-                  {/* Team Members (Duo/Squad) */}
-                  {teamMembers.length > 0 && (
-                    <div className="space-y-3">
-                      <Label className="font-mono text-xs uppercase text-muted-foreground">Teammate Details</Label>
-                      {teamMembers.map((member, i) => (
-                        <div key={i} className="grid grid-cols-2 gap-3 p-3 bg-background/50 border border-border/30 rounded">
+                    {/* Teammates — Player 2, 3, 4 */}
+                    {teamMembers.map((member, i) => (
+                      <div key={i} className="p-3 bg-background/50 border border-border/30 rounded space-y-2">
+                        <p className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-wider">
+                          Player {i + 2} — Teammate {i + 1}
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <Label className="font-mono text-xs text-muted-foreground">Teammate {i + 1} UID</Label>
-                            <Input value={member.uid} onChange={e => updateMember(i, "uid", e.target.value)} placeholder="Free Fire UID" className="bg-background/30 border-border/50 font-mono mt-1" />
+                            <Label className="font-mono text-xs text-muted-foreground">Free Fire UID</Label>
+                            <Input value={member.uid} onChange={e => updateMember(i, "uid", e.target.value)} placeholder="e.g. 1234567890" className="bg-background/30 border-border/50 font-mono mt-1" />
                           </div>
                           <div>
-                            <Label className="font-mono text-xs text-muted-foreground">IGN</Label>
-                            <Input value={member.name} onChange={e => updateMember(i, "name", e.target.value)} placeholder="In-Game Name" className="bg-background/30 border-border/50 font-mono mt-1" />
+                            <Label className="font-mono text-xs text-muted-foreground">In-Game Name</Label>
+                            <Input value={member.name} onChange={e => updateMember(i, "name", e.target.value)} placeholder="Teammate IGN" className="bg-background/30 border-border/50 font-mono mt-1" />
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    ))}
+                    <p className="text-xs font-mono text-muted-foreground">You can update your UID/IGN if playing on a different account.</p>
+                  </div>
 
                   {/* Payment info */}
                   {tournament.entryFee > 0 ? (
