@@ -30,7 +30,7 @@ function TournamentCountdown({ startDateTime }: { startDateTime: string }) {
 export default function Home() {
   const { data: tournamentsData, isLoading: isLoadingTournaments } = useGetTournaments(
     { status: "upcoming", limit: 3 },
-    { query: { queryKey: getGetTournamentsQueryKey({ status: "upcoming", limit: 3 }) } }
+    { query: { queryKey: getGetTournamentsQueryKey({ status: "upcoming", limit: 3 }), refetchInterval: 30_000 } }
   );
 
   const { data: leaderboardData, isLoading: isLoadingLeaderboard } = useGetGlobalLeaderboard(

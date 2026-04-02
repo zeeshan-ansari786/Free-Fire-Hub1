@@ -31,7 +31,7 @@ export default function TournamentDetail() {
 
   const { data: tournament, isLoading } = useGetTournament(
     tournamentId,
-    { query: { enabled: !!tournamentId, queryKey: getGetTournamentQueryKey(tournamentId) } }
+    { query: { enabled: !!tournamentId, queryKey: getGetTournamentQueryKey(tournamentId), refetchInterval: 30_000 } }
   );
 
   const { data: leaderboard, isLoading: isLoadingLeaderboard } = useGetTournamentLeaderboard(

@@ -47,7 +47,7 @@ export default function Tournaments() {
   
   const { data, isLoading } = useGetTournaments(
     { status: statusFilter, limit: 20 },
-    { query: { queryKey: getGetTournamentsQueryKey({ status: statusFilter, limit: 20 }) } }
+    { query: { queryKey: getGetTournamentsQueryKey({ status: statusFilter, limit: 20 }), refetchInterval: 30_000 } }
   );
 
   return (

@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import session from "express-session";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { startTournamentScheduler } from "./lib/scheduler";
 import path from "path";
 import fs from "fs";
 
@@ -52,5 +53,7 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use("/api/uploads", express.static(uploadsDir));
 
 app.use("/api", router);
+
+startTournamentScheduler();
 
 export default app;
