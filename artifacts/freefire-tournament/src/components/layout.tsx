@@ -5,35 +5,41 @@ import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bell, User, ShieldAlert, LogOut, Swords, Menu, Wallet, Trophy } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState } from "react";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
   const logout = useLogout();
   const queryClient = useQueryClient();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
         queryClient.clear();
-        setLocation("/");
+        window.location.href = "/";
+      },
+      onError: () => {
+        queryClient.clear();
+        window.location.href = "/";
       }
     });
   };
 
-  const NavLinks = () => (
+  const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
     <>
-      <Link href="/tournaments" className={`hover:text-primary transition-colors ${location === "/tournaments" ? "text-primary neon-text" : "text-muted-foreground"}`}>Tournaments</Link>
-      <Link href="/leaderboard" className={`hover:text-primary transition-colors ${location === "/leaderboard" ? "text-primary neon-text" : "text-muted-foreground"}`}>Leaderboard</Link>
+      <Link href="/tournaments" onClick={onNavigate} className={`hover:text-primary transition-colors ${location === "/tournaments" ? "text-primary neon-text" : "text-muted-foreground"}`}>Tournaments</Link>
+      <Link href="/leaderboard" onClick={onNavigate} className={`hover:text-primary transition-colors ${location === "/leaderboard" ? "text-primary neon-text" : "text-muted-foreground"}`}>Leaderboard</Link>
       {isAuthenticated && (
         <>
-          <Link href="/my-matches" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/my-matches" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+          <Link href="/my-matches" onClick={onNavigate} className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/my-matches" ? "text-primary neon-text" : "text-muted-foreground"}`}>
             My Matches
           </Link>
-          <Link href="/wallet" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/wallet" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+          <Link href="/wallet" onClick={onNavigate} className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/wallet" ? "text-primary neon-text" : "text-muted-foreground"}`}>
             Wallet
           </Link>
-          <Link href="/notifications" className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/notifications" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+          <Link href="/notifications" onClick={onNavigate} className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/notifications" ? "text-primary neon-text" : "text-muted-foreground"}`}>
             <Bell className="h-4 w-4" />
           </Link>
         </>
@@ -61,7 +67,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 md:gap-4 z-10">
             {isAuthenticated ? (
               <div className="flex items-center gap-2 md:gap-3">
-                {/* Wallet balance quick view */}
                 <Link href="/wallet" className="hidden sm:flex items-center gap-1 text-xs font-mono text-secondary border border-secondary/30 px-2 py-1 rounded hover:bg-secondary/10 transition-colors">
                   <Wallet className="h-3 w-3" />
                   Wallet
@@ -97,24 +102,50 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             )}
 
-            <Sheet>
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="bg-background/95 backdrop-blur border-l-primary/20">
-                <div className="flex flex-col gap-6 mt-8">
-                  <NavLinks />
+              <SheetContent side="right" className="bg-background/95 backdrop-blur border-l-primary/20 flex flex-col">
+                <div className="flex flex-col gap-6 mt-8 flex-1 text-sm font-semibold uppercase tracking-widest">
+                  <NavLinks onNavigate={() => setMobileMenuOpen(false)} />
+
                   {!isAuthenticated && (
-                    <Link href="/login" className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold mt-4">Login</Link>
+                    <div className="flex flex-col gap-4 mt-4">
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold">Login</Link>
+                      <Link href="/register" onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold">Register</Link>
+                    </div>
                   )}
-                  {isAuthenticated && user?.isAdmin && (
-                    <Link href="/admin" className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold flex items-center gap-2">
-                      <ShieldAlert className="h-4 w-4" /> Admin Dashboard
-                    </Link>
+
+                  {isAuthenticated && (
+                    <>
+                      {user?.isAdmin && (
+                        <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4" /> Admin Dashboard
+                        </Link>
+                      )}
+                      <Link href="/profile" onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-primary uppercase tracking-widest font-semibold flex items-center gap-2">
+                        <User className="h-4 w-4" /> Profile
+                      </Link>
+                    </>
                   )}
                 </div>
+
+                {isAuthenticated && (
+                  <div className="border-t border-primary/20 pt-6 pb-4 mt-4">
+                    <p className="text-xs font-mono text-muted-foreground mb-3">{user?.inGameName}</p>
+                    <Button
+                      variant="destructive"
+                      className="w-full flex items-center gap-2 font-bold uppercase tracking-wider"
+                      onClick={() => { setMobileMenuOpen(false); handleLogout(); }}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </Button>
+                  </div>
+                )}
               </SheetContent>
             </Sheet>
           </div>

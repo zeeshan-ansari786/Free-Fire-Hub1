@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { getDefaultBanner } from "@/lib/tournament-defaults";
 import { 
@@ -45,8 +45,23 @@ export default function TournamentDetail() {
   const [insufficientData, setInsufficientData] = useState<{ required: number; balance: number } | null>(null);
   const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
 
+  const storageKey = `reg_form_${tournamentId}`;
+  const dialogWasOpenRef = useRef(false);
+
+  // Load saved form state from sessionStorage
+  const loadSavedForm = useCallback(() => {
+    try {
+      const saved = sessionStorage.getItem(storageKey);
+      if (saved) return JSON.parse(saved) as { playerInfo: { uid: string; name: string }; teamMembers: TeamMember[] };
+    } catch {}
+    return null;
+  }, [storageKey]);
+
   // Player's own playing UID/IGN (can differ from account UID)
-  const [playerInfo, setPlayerInfo] = useState({ uid: "", name: "" });
+  const [playerInfo, setPlayerInfo] = useState<{ uid: string; name: string }>(() => {
+    const saved = loadSavedForm();
+    return saved?.playerInfo ?? { uid: "", name: "" };
+  });
 
   // Dynamic team members for duo/squad (teammates only, not self)
   const getDefaultMembers = (mode: string): TeamMember[] => {
@@ -54,13 +69,26 @@ export default function TournamentDetail() {
     if (mode === "squad") return [{ uid: "", name: "" }, { uid: "", name: "" }, { uid: "", name: "" }];
     return [];
   };
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
+    const saved = loadSavedForm();
+    return saved?.teamMembers ?? [];
+  });
 
+  // When tournament mode loads, initialise team slots only if not already restored from storage
   useEffect(() => {
-    if (tournament?.gameMode) setTeamMembers(getDefaultMembers(tournament.gameMode));
+    if (!tournament?.gameMode) return;
+    const saved = loadSavedForm();
+    if (!saved) setTeamMembers(getDefaultMembers(tournament.gameMode));
   }, [tournament?.gameMode]);
 
-  // Pre-fill player info from account when dialog opens
+  // Persist form data to sessionStorage whenever it changes
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({ playerInfo, teamMembers }));
+    } catch {}
+  }, [playerInfo, teamMembers, storageKey]);
+
+  // Pre-fill player info from account when dialog opens (only if fields are empty)
   useEffect(() => {
     if (isRegisterOpen && user) {
       setPlayerInfo(prev => ({
@@ -69,6 +97,22 @@ export default function TournamentDetail() {
       }));
     }
   }, [isRegisterOpen]);
+
+  // Track whether the dialog was open before the user switched apps
+  useEffect(() => {
+    dialogWasOpenRef.current = isRegisterOpen;
+  }, [isRegisterOpen]);
+
+  // Re-open the dialog when the user comes back from another app (mobile)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && dialogWasOpenRef.current) {
+        setIsRegisterOpen(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     if (!tournament?.startDateTime || tournament.status !== "upcoming") return;
@@ -123,6 +167,7 @@ export default function TournamentDetail() {
         onSuccess: () => {
           toast({ title: "Registered Successfully!", description: payableAmount === 0 ? "You're in! Check 'My Matches' for room details." : `₹${payableAmount} deducted from your wallet. You're in!` });
           setIsRegisterOpen(false);
+          try { sessionStorage.removeItem(storageKey); } catch {}
           queryClient.invalidateQueries({ queryKey: getGetTournamentQueryKey(tournamentId) });
         },
         onError: (err: any) => {
