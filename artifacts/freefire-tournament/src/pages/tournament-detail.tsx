@@ -70,16 +70,21 @@ export default function TournamentDetail() {
     if (mode === "squad") return [{ uid: "", name: "" }, { uid: "", name: "" }, { uid: "", name: "" }];
     return [];
   };
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
-    const saved = loadSavedForm();
-    return saved?.teamMembers ?? [];
-  });
+  // Start empty — the useEffect below populates once the tournament mode is known
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
-  // When tournament mode loads, initialise team slots only if not already restored from storage
+  // Initialise team slots when tournament mode is known.
+  // If sessionStorage has the right number of members for this mode, restore them.
+  // Otherwise (first visit, or stale/wrong count), start fresh with empty defaults.
   useEffect(() => {
     if (!tournament?.gameMode) return;
+    const defaults = getDefaultMembers(tournament.gameMode);
     const saved = loadSavedForm();
-    if (!saved) setTeamMembers(getDefaultMembers(tournament.gameMode));
+    if (saved?.teamMembers && saved.teamMembers.length === defaults.length) {
+      setTeamMembers(saved.teamMembers);
+    } else {
+      setTeamMembers(defaults);
+    }
   }, [tournament?.gameMode]);
 
   // Persist form data to sessionStorage whenever it changes
