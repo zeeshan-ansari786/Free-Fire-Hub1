@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRegister, getGetMeQueryKey } from "@workspace/api-client-react";
+import type { ApiError, ErrorResponse } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,12 +15,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 const registerSchema = z.object({
-  username: z.string().min(3).max(30),
-  email: z.string().email(),
-  password: z.string().min(6),
-  freeFireUid: z.string().min(5),
-  inGameName: z.string().min(3),
-  whatsappNumber: z.string().min(10),
+  username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be under 30 characters"),
+  email: z.string().email("Please enter a valid email"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  freeFireUid: z.string().min(5, "Free Fire UID must be at least 5 characters"),
+  inGameName: z.string().min(3, "In-game name must be at least 3 characters"),
+  whatsappNumber: z.string().min(10, "Please enter a valid WhatsApp number"),
 });
 
 export default function Register() {
@@ -30,10 +31,9 @@ export default function Register() {
   const { isAuthenticated } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
-  if (isAuthenticated) {
-    setLocation("/");
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) setLocation("/");
+  }, [isAuthenticated, setLocation]);
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
@@ -51,21 +51,30 @@ export default function Register() {
     register({ data: values }, {
       onSuccess: () => {
         toast({
-          title: "Registration successful!",
-          description: "Welcome to the arena.",
+          title: "Account created successfully!",
+          description: "Welcome to the arena. Let the games begin.",
         });
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         setLocation("/");
       },
       onError: (err) => {
+        const apiErr = err as ApiError<ErrorResponse>;
+        const message =
+          apiErr.data?.error ||
+          (apiErr.status === 409 ? "An account with this email or UID already exists." :
+           apiErr.status === 400 ? "Please fill in all required fields correctly." :
+           apiErr.status >= 500 ? "Server error. Please try again later." :
+           "Registration failed. Please try again.");
         toast({
           title: "Registration failed",
-          description: err.error?.message || "An error occurred",
-          variant: "destructive"
+          description: message,
+          variant: "destructive",
         });
-      }
+      },
     });
   };
+
+  if (isAuthenticated) return null;
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
@@ -182,8 +191,8 @@ export default function Register() {
                 />
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest clip-path-slant h-12 rounded-none shadow-[0_0_15px_rgba(57,255,20,0.4)] mt-8"
                 disabled={isPending}
               >

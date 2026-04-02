@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useLogin } from "@workspace/api-client-react";
+import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
+import type { ApiError, ErrorResponse } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,23 +12,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Swords } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getGetMeQueryKey } from "@workspace/api-client-react";
+import { useToast } from "@/hooks/use-toast";
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  email: z.string().email("Please enter a valid email"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { mutate: login, isPending } = useLogin();
   const { isAuthenticated } = useAuth();
 
-  if (isAuthenticated) {
-    setLocation("/");
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) setLocation("/");
+  }, [isAuthenticated, setLocation]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -41,9 +43,25 @@ export default function Login() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         setLocation("/");
-      }
+      },
+      onError: (err) => {
+        const apiErr = err as ApiError<ErrorResponse>;
+        const message =
+          apiErr.data?.error ||
+          (apiErr.status === 401 ? "Invalid email or password" :
+           apiErr.status === 403 ? "Your account has been banned. Contact support." :
+           apiErr.status >= 500 ? "Server error. Please try again later." :
+           "Login failed. Please check your details.");
+        toast({
+          title: "Login failed",
+          description: message,
+          variant: "destructive",
+        });
+      },
     });
   };
+
+  if (isAuthenticated) return null;
 
   return (
     <div className="flex items-center justify-center min-h-[70vh]">
@@ -71,9 +89,9 @@ export default function Login() {
                   <FormItem>
                     <FormLabel className="font-mono text-primary">EMAIL</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="player@example.com" 
-                        {...field} 
+                      <Input
+                        placeholder="player@example.com"
+                        {...field}
                         className="bg-background/50 border-primary/30 focus-visible:ring-primary font-mono"
                       />
                     </FormControl>
@@ -88,10 +106,10 @@ export default function Login() {
                   <FormItem>
                     <FormLabel className="font-mono text-primary">PASSWORD</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="password" 
-                        placeholder="••••••••" 
-                        {...field} 
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        {...field}
                         className="bg-background/50 border-primary/30 focus-visible:ring-primary font-mono"
                       />
                     </FormControl>
@@ -99,8 +117,8 @@ export default function Login() {
                   </FormItem>
                 )}
               />
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest clip-path-slant h-12 rounded-none shadow-[0_0_15px_rgba(0,245,255,0.4)]"
                 disabled={isPending}
               >
