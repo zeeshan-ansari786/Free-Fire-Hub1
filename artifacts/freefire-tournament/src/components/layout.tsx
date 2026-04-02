@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, User, ShieldAlert, LogOut, Swords, Menu, Wallet, Trophy } from "lucide-react";
+import { Bell, User, ShieldAlert, LogOut, Swords, Menu, Wallet } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 
@@ -13,6 +13,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const logout = useLogout();
   const queryClient = useQueryClient();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const walletBalance = (user as any)?.walletBalance ?? 0;
 
   const handleLogout = () => {
     logout.mutate(undefined, {
@@ -50,27 +52,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary selection:text-primary-foreground relative overflow-hidden">
       <div className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-background to-background opacity-50" />
-      
+
       <header className="sticky top-0 z-50 w-full border-b border-primary/20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-[0_4px_20px_rgba(0,245,255,0.05)]">
         <div className="container mx-auto px-4 flex h-16 items-center justify-between">
+
+          {/* Logo */}
           <Link href="/" className="flex items-center gap-2 transition-transform hover:scale-105 z-10">
             <Swords className="h-6 w-6 text-primary drop-shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
             <span className="font-display text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary drop-shadow-[0_0_10px_rgba(0,245,255,0.3)] uppercase">
               FF ARENA
             </span>
           </Link>
-          
+
+          {/* Desktop nav links */}
           <nav className="hidden md:flex items-center gap-8 text-sm font-semibold uppercase tracking-widest z-10">
             <NavLinks />
           </nav>
 
-          <div className="flex items-center gap-2 md:gap-4 z-10">
+          {/* Right side actions */}
+          <div className="flex items-center gap-1 md:gap-3 z-10">
             {isAuthenticated ? (
-              <div className="flex items-center gap-2 md:gap-3">
-                <Link href="/wallet" className="hidden sm:flex items-center gap-1 text-xs font-mono text-secondary border border-secondary/30 px-2 py-1 rounded hover:bg-secondary/10 transition-colors">
-                  <Wallet className="h-3 w-3" />
-                  Wallet
-                </Link>
+              <>
+                {/* Admin button — desktop only */}
                 {user?.isAdmin && (
                   <Link href="/admin">
                     <Button variant="outline" size="sm" className="hidden sm:flex border-primary/50 hover:bg-primary/10 hover:text-primary transition-all clip-path-slant rounded-none font-mono">
@@ -79,16 +82,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     </Button>
                   </Link>
                 )}
+
+                {/* Profile — always visible */}
                 <Link href="/profile">
-                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-accent hover:text-primary transition-colors font-mono">
-                    <User className="h-4 w-4" />
-                    <span className="hidden sm:inline">{user?.inGameName}</span>
+                  <Button variant="ghost" size="sm" className="flex items-center gap-1.5 hover:bg-accent hover:text-primary transition-colors font-mono px-2">
+                    <User className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline text-sm truncate max-w-[80px]">{user?.inGameName}</span>
                   </Button>
                 </Link>
-                <Button variant="ghost" size="icon" onClick={handleLogout} className="hover:text-destructive hover:bg-destructive/10">
+
+                {/* Wallet icon + balance — always visible */}
+                <Link href="/wallet">
+                  <button className="flex flex-col items-center justify-center gap-0 px-2 py-1 rounded-lg border border-secondary/30 bg-secondary/5 hover:bg-secondary/15 transition-colors min-w-[44px]">
+                    <Wallet className="h-4 w-4 text-secondary drop-shadow-[0_0_6px_rgba(57,255,20,0.6)]" />
+                    <span className="text-[10px] font-mono font-bold text-secondary leading-tight">
+                      ₹{walletBalance.toLocaleString("en-IN")}
+                    </span>
+                  </button>
+                </Link>
+
+                {/* Logout — desktop only (mobile gets it in the hamburger) */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  className="hidden md:flex hover:text-destructive hover:bg-destructive/10"
+                  title="Logout"
+                >
                   <LogOut className="h-4 w-4" />
                 </Button>
-              </div>
+              </>
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/login">
@@ -102,14 +125,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             )}
 
+            {/* Hamburger — mobile only */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
+                <Button variant="ghost" size="icon" className="md:hidden ml-1">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="bg-background/95 backdrop-blur border-l-primary/20 flex flex-col">
-                <div className="flex flex-col gap-6 mt-8 flex-1 text-sm font-semibold uppercase tracking-widest">
+
+                {/* Wallet summary at top of menu when logged in */}
+                {isAuthenticated && (
+                  <Link href="/wallet" onClick={() => setMobileMenuOpen(false)}>
+                    <div className="mt-6 mb-2 flex items-center gap-3 p-3 rounded-xl border border-secondary/30 bg-secondary/5 hover:bg-secondary/10 transition-colors">
+                      <div className="flex flex-col items-center justify-center w-10 h-10 rounded-lg bg-secondary/10 border border-secondary/20">
+                        <Wallet className="h-4 w-4 text-secondary" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Wallet Balance</p>
+                        <p className="text-lg font-bold font-mono text-secondary leading-tight">
+                          ₹{walletBalance.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                )}
+
+                <div className="flex flex-col gap-5 mt-4 flex-1 text-sm font-semibold uppercase tracking-widest">
                   <NavLinks onNavigate={() => setMobileMenuOpen(false)} />
 
                   {!isAuthenticated && (
@@ -133,9 +175,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
 
+                {/* Logout at the bottom of the mobile menu */}
                 {isAuthenticated && (
-                  <div className="border-t border-primary/20 pt-6 pb-4 mt-4">
-                    <p className="text-xs font-mono text-muted-foreground mb-3">{user?.inGameName}</p>
+                  <div className="border-t border-primary/20 pt-5 pb-4 mt-4">
+                    <p className="text-xs font-mono text-muted-foreground mb-3 truncate">{user?.inGameName}</p>
                     <Button
                       variant="destructive"
                       className="w-full flex items-center gap-2 font-bold uppercase tracking-wider"
@@ -149,6 +192,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </SheetContent>
             </Sheet>
           </div>
+
         </div>
       </header>
 
