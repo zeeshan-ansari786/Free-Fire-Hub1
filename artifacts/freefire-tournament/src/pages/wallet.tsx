@@ -72,8 +72,8 @@ export default function WalletPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  // "qr" = step 1: show QR/payment screen, "form" = step 2: enter details
-  const [depositStep, setDepositStep] = useState<"qr" | "form" | null>(null);
+  // "amount" = step 1: enter amount, "payment" = step 2: QR + UTR on same screen
+  const [depositStep, setDepositStep] = useState<"amount" | "payment" | null>(null);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [depositRef, setDepositRef] = useState("");
@@ -98,17 +98,26 @@ export default function WalletPage() {
 
   const openDeposit = (presetAmount?: string) => {
     if (presetAmount) setDepositAmount(presetAmount);
-    setDepositStep("qr");
+    setDepositStep("amount");
+  };
+
+  const proceedToPayment = () => {
+    const amt = parseInt(depositAmount);
+    if (!depositAmount || isNaN(amt) || amt < 30) {
+      toast({ title: "Minimum deposit is ₹30", variant: "destructive" }); return;
+    }
+    setDepositStep("payment");
   };
 
   const handleDeposit = () => {
-    if (!depositAmount || parseInt(depositAmount) <= 0) {
-      toast({ title: "Enter a valid amount", variant: "destructive" }); return;
+    const amt = parseInt(depositAmount);
+    if (!depositAmount || isNaN(amt) || amt < 30) {
+      toast({ title: "Minimum deposit is ₹30", variant: "destructive" }); return;
     }
     if (!depositRef.trim()) {
-      toast({ title: "Enter UTR / transaction reference", variant: "destructive" }); return;
+      toast({ title: "Enter UTR / Transaction ID", variant: "destructive" }); return;
     }
-    deposit.mutate({ amount: parseInt(depositAmount), transactionRef: depositRef.trim(), paymentMethod: "qr" }, {
+    deposit.mutate({ amount: amt, transactionRef: depositRef.trim(), paymentMethod: "qr" }, {
       onSuccess: (data) => {
         toast({ title: "Deposit Request Submitted!", description: data.message });
         setDepositStep(null); setDepositAmount(""); setDepositRef("");
@@ -210,53 +219,58 @@ export default function WalletPage() {
         </CardContent>
       </Card>
 
-      {/* Deposit Dialog — Two-step: QR screen → form */}
+      {/* Deposit Dialog — Two-step: enter amount → QR + UTR form */}
       <Dialog open={depositStep !== null} onOpenChange={open => { if (!open) { setDepositStep(null); setDepositAmount(""); setDepositRef(""); } }}>
         <DialogContent className="bg-card border-secondary/30 max-w-md overflow-hidden p-0">
 
-          {/* ── STEP 1: Payment / QR Screen ── */}
-          {depositStep === "qr" && (
+          {/* ── STEP 1: Enter Amount ── */}
+          {depositStep === "amount" && (
             <div className="flex flex-col">
-              {/* Header */}
               <div className="px-6 pt-6 pb-4 border-b border-secondary/20">
                 <div className="flex items-center gap-2 mb-1">
-                  <ScanLine className="h-5 w-5 text-secondary drop-shadow-[0_0_6px_rgba(57,255,20,0.8)]" />
-                  <span className="font-display text-lg font-bold uppercase tracking-wider text-secondary">Scan & Pay</span>
+                  <ArrowDownCircle className="h-5 w-5 text-secondary drop-shadow-[0_0_6px_rgba(57,255,20,0.8)]" />
+                  <span className="font-display text-lg font-bold uppercase tracking-wider text-secondary">Add Funds</span>
                 </div>
-                <p className="text-xs font-mono text-muted-foreground">Step 1 of 2 — Make your payment first</p>
+                <p className="text-xs font-mono text-muted-foreground">Step 1 of 2 — Enter the amount you want to deposit</p>
               </div>
 
               <div className="px-6 py-5 space-y-5">
-                {/* QR Code block */}
-                <div className="rounded-2xl border border-secondary/25 bg-secondary/5 p-5 flex flex-col items-center gap-4">
-                  {config?.qrCodeUrl ? (
-                    <>
-                      <div className="bg-white rounded-xl p-3 shadow-[0_0_25px_rgba(57,255,20,0.2)]">
-                        <img src={config.qrCodeUrl} alt="Payment QR Code" className="w-52 h-52 object-contain" />
-                      </div>
-                      <p className="text-xs font-mono text-muted-foreground text-center">
-                        Scan with <span className="text-foreground font-bold">GPay · PhonePe · Paytm</span> or any UPI app
-                      </p>
-                    </>
-                  ) : (
-                    <div className="py-4 text-center space-y-2">
-                      <QrCode className="h-16 w-16 text-muted-foreground/20 mx-auto" />
-                      <p className="text-muted-foreground font-mono text-sm">QR code not set up yet.</p>
-                    </div>
-                  )}
-
-                  {/* UPI ID row */}
-                  <div className="w-full bg-background/50 border border-border/40 rounded-lg px-4 py-2.5 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">UPI ID</p>
-                      <p className="font-mono font-bold text-sm text-foreground truncate">{config?.upiId || "ffarena@upi"}</p>
-                    </div>
-                    <Button size="sm" variant="ghost" className="shrink-0 h-8 px-2 text-secondary hover:text-secondary hover:bg-secondary/10" onClick={copyUpi}>
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
+                {/* Quick-fill */}
+                <div>
+                  <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Quick select</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[100, 250, 500, 1000].map(amt => (
+                      <button
+                        key={amt}
+                        onClick={() => setDepositAmount(String(amt))}
+                        className={`py-2.5 text-sm font-mono font-bold rounded border transition-all ${depositAmount === String(amt) ? "bg-secondary/20 border-secondary text-secondary shadow-[0_0_10px_rgba(57,255,20,0.2)]" : "border-border/40 text-muted-foreground hover:border-secondary/40 hover:text-secondary/70"}`}
+                      >
+                        ₹{amt}
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-xs font-mono text-muted-foreground/70 text-center">
-                    Pay to: <span className="text-foreground">{config?.upiName || "FF Arena Official"}</span>
+                </div>
+
+                {/* Amount input */}
+                <div className="space-y-1.5">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">
+                    Amount (₹) <span className="text-destructive">*</span>
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-lg">₹</span>
+                    <Input
+                      type="number"
+                      min="30"
+                      value={depositAmount}
+                      onChange={e => setDepositAmount(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && proceedToPayment()}
+                      placeholder="0"
+                      className="bg-background/50 border-border/50 font-mono text-xl h-14 pl-8 focus:border-secondary/60"
+                    />
+                  </div>
+                  <p className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
+                    <Info className="h-3 w-3 text-yellow-500" />
+                    Minimum deposit: <span className="text-yellow-400 font-bold">₹30</span>
                   </p>
                 </div>
 
@@ -269,94 +283,98 @@ export default function WalletPage() {
                   </div>
                 </div>
 
-                {/* CTA */}
                 <Button
                   className="w-full h-12 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold text-base uppercase tracking-widest shadow-[0_0_20px_rgba(57,255,20,0.35)]"
-                  onClick={() => setDepositStep("form")}
+                  onClick={proceedToPayment}
+                  disabled={!depositAmount || parseInt(depositAmount) < 30}
                 >
-                  I Have Paid →
+                  Proceed to Pay →
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 2: Enter Details ── */}
-          {depositStep === "form" && (
+          {/* ── STEP 2: QR Code + UTR Form ── */}
+          {depositStep === "payment" && (
             <div className="flex flex-col">
-              {/* Header with back button */}
+              {/* Header */}
               <div className="px-6 pt-6 pb-4 border-b border-secondary/20">
                 <button
-                  onClick={() => setDepositStep("qr")}
+                  onClick={() => setDepositStep("amount")}
                   className="flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors mb-3"
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" /> Back to payment
+                  <ChevronLeft className="h-3.5 w-3.5" /> Change amount
                 </button>
-                <div className="flex items-center gap-2 mb-1">
-                  <ArrowDownCircle className="h-5 w-5 text-secondary drop-shadow-[0_0_6px_rgba(57,255,20,0.8)]" />
-                  <span className="font-display text-lg font-bold uppercase tracking-wider text-secondary">Confirm Payment</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ScanLine className="h-5 w-5 text-secondary drop-shadow-[0_0_6px_rgba(57,255,20,0.8)]" />
+                    <span className="font-display text-lg font-bold uppercase tracking-wider text-secondary">Scan & Pay</span>
+                  </div>
+                  <div className="bg-secondary/15 border border-secondary/30 rounded-lg px-3 py-1">
+                    <span className="font-mono font-black text-secondary text-lg">₹{depositAmount}</span>
+                  </div>
                 </div>
-                <p className="text-xs font-mono text-muted-foreground">Step 2 of 2 — Enter your payment details</p>
+                <p className="text-xs font-mono text-muted-foreground mt-1">Step 2 of 2 — Scan, pay, then enter your Transaction ID</p>
               </div>
 
-              <div className="px-6 py-5 space-y-5">
-                {/* Confirmation reminder */}
-                <div className="bg-secondary/8 border border-secondary/25 rounded-xl p-4 font-mono text-xs space-y-1.5">
-                  <p className="text-secondary font-bold uppercase tracking-wide text-[11px]">✓ Payment Sent — Now tell us the details</p>
-                  <p className="text-muted-foreground">Enter the amount you paid and your UTR number from the payment app.</p>
+              <div className="px-6 py-5 space-y-4">
+                {/* QR Code */}
+                <div className="rounded-xl border border-secondary/25 bg-secondary/5 p-4 flex flex-col items-center gap-3">
+                  {config?.qrCodeUrl ? (
+                    <>
+                      <div className="bg-white rounded-xl p-3 shadow-[0_0_25px_rgba(57,255,20,0.2)]">
+                        <img src={config.qrCodeUrl} alt="Payment QR Code" className="w-48 h-48 object-contain" />
+                      </div>
+                      <p className="text-xs font-mono text-muted-foreground text-center">
+                        Scan with <span className="text-foreground font-bold">GPay · PhonePe · Paytm</span> or any UPI app
+                      </p>
+                    </>
+                  ) : (
+                    <div className="py-6 text-center space-y-2">
+                      <QrCode className="h-16 w-16 text-muted-foreground/20 mx-auto" />
+                      <p className="text-muted-foreground font-mono text-sm">QR code not configured yet.</p>
+                    </div>
+                  )}
+
+                  {/* UPI ID */}
+                  <div className="w-full bg-background/50 border border-border/40 rounded-lg px-4 py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">UPI ID</p>
+                      <p className="font-mono font-bold text-sm text-foreground truncate">{config?.upiId || "ffarena@upi"}</p>
+                    </div>
+                    <Button size="sm" variant="ghost" className="shrink-0 h-8 px-2 text-secondary hover:text-secondary hover:bg-secondary/10" onClick={copyUpi}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Amount */}
-                  <div className="space-y-1.5">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">Amount Paid (₹) <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={depositAmount}
-                      onChange={e => setDepositAmount(e.target.value)}
-                      placeholder="Enter exact amount paid"
-                      className="bg-background/50 border-border/50 font-mono text-lg h-12"
-                    />
-                    {/* Quick-fill buttons */}
-                    <div className="flex gap-2 pt-1">
-                      {[100, 250, 500, 1000].map(amt => (
-                        <button
-                          key={amt}
-                          onClick={() => setDepositAmount(String(amt))}
-                          className={`flex-1 text-xs font-mono py-1.5 rounded border transition-all ${depositAmount === String(amt) ? "bg-secondary/25 border-secondary text-secondary" : "border-border/40 text-muted-foreground hover:border-secondary/40 hover:text-secondary/70"}`}
-                        >
-                          ₹{amt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* UTR */}
-                  <div className="space-y-1.5">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">UTR / Transaction ID <span className="text-destructive">*</span></Label>
-                    <Input
-                      value={depositRef}
-                      onChange={e => setDepositRef(e.target.value)}
-                      placeholder="e.g. 123456789012"
-                      className="bg-background/50 border-border/50 font-mono h-12"
-                    />
-                    <p className="text-[11px] text-muted-foreground font-mono">
-                      Find this in your UPI app → Transactions → Payment to FF Arena
-                    </p>
-                  </div>
-
-                  {/* Submit */}
-                  <Button
-                    onClick={handleDeposit}
-                    disabled={deposit.isPending || !depositAmount || !depositRef.trim()}
-                    className="w-full h-12 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest shadow-[0_0_20px_rgba(57,255,20,0.25)]"
-                  >
-                    {deposit.isPending ? "Submitting..." : "Submit for Verification"}
-                  </Button>
-                  <p className="text-[11px] font-mono text-muted-foreground text-center">
-                    Admin will verify and credit your wallet within 5 minutes.
+                {/* UTR input */}
+                <div className="space-y-1.5">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">
+                    Transaction ID / UTR <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={depositRef}
+                    onChange={e => setDepositRef(e.target.value)}
+                    placeholder="Enter UTR after payment (e.g. 123456789012)"
+                    className="bg-background/50 border-border/50 font-mono h-12"
+                  />
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    Find this in your UPI app → Transactions → Payment to FF Arena
                   </p>
                 </div>
+
+                {/* Submit */}
+                <Button
+                  onClick={handleDeposit}
+                  disabled={deposit.isPending || !depositRef.trim()}
+                  className="w-full h-12 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold uppercase tracking-widest shadow-[0_0_20px_rgba(57,255,20,0.25)]"
+                >
+                  {deposit.isPending ? "Submitting..." : "Submit for Verification"}
+                </Button>
+                <p className="text-[11px] font-mono text-muted-foreground text-center">
+                  Admin will verify and credit ₹{depositAmount} to your wallet within 5 minutes.
+                </p>
               </div>
             </div>
           )}

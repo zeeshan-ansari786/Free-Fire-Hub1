@@ -1,12 +1,31 @@
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useGetTournaments, useGetGlobalLeaderboard, getGetTournamentsQueryKey, getGetGlobalLeaderboardQueryKey } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trophy, Users, Zap, IndianRupee, ArrowRight, Activity, Medal, Swords, Crosshair, Flame } from "lucide-react";
-import { format } from "date-fns";
+import { Trophy, Users, Zap, IndianRupee, ArrowRight, Activity, Medal, Swords, Crosshair, Flame, Map, Timer } from "lucide-react";
+import { format, differenceInSeconds } from "date-fns";
 import { motion } from "framer-motion";
+import { getDefaultBanner } from "@/lib/tournament-defaults";
+
+function TournamentCountdown({ startDateTime }: { startDateTime: string }) {
+  const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
+  useEffect(() => {
+    const compute = () => {
+      const diff = differenceInSeconds(new Date(startDateTime), new Date());
+      if (diff <= 0) return null;
+      return { d: Math.floor(diff / 86400), h: Math.floor((diff % 86400) / 3600), m: Math.floor((diff % 3600) / 60), s: diff % 60 };
+    };
+    setTimeLeft(compute());
+    const interval = setInterval(() => setTimeLeft(compute()), 1000);
+    return () => clearInterval(interval);
+  }, [startDateTime]);
+  if (!timeLeft) return <span className="flex items-center gap-1 text-destructive font-bold"><Timer className="h-3 w-3" /> Starting Now!</span>;
+  if (timeLeft.d > 0) return <span className="flex items-center gap-1 text-primary font-mono font-bold"><Timer className="h-3 w-3" />{timeLeft.d}d {String(timeLeft.h).padStart(2,"0")}h {String(timeLeft.m).padStart(2,"0")}m</span>;
+  return <span className="flex items-center gap-1 font-mono font-bold text-yellow-400 animate-pulse"><Timer className="h-3 w-3" />{String(timeLeft.h).padStart(2,"0")}:{String(timeLeft.m).padStart(2,"0")}:{String(timeLeft.s).padStart(2,"0")}</span>;
+}
 
 export default function Home() {
   const { data: tournamentsData, isLoading: isLoadingTournaments } = useGetTournaments(
@@ -82,9 +101,9 @@ export default function Home() {
         </div>
 
         {isLoadingTournaments ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-64 rounded-xl bg-card border border-border animate-pulse" />
+              <div key={i} className="h-48 rounded-xl bg-card border border-border animate-pulse" />
             ))}
           </div>
         ) : !tournamentsData?.tournaments?.length ? (
@@ -95,60 +114,61 @@ export default function Home() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {tournamentsData?.tournaments.map((t) => (
               <Link key={t.id} href={`/tournaments/${t.id}`}>
-                <Card className="group cursor-pointer hover:neon-border transition-all duration-300 bg-card/80 backdrop-blur border-primary/20 overflow-hidden relative h-full flex flex-col">
-                  <div className="absolute top-0 right-0 p-3 flex gap-2 z-10">
-                    <div className="bg-background/90 backdrop-blur px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider border border-primary/30 text-primary shadow-sm rounded">
-                      {t.gameMode}
+                <Card className="group cursor-pointer transition-all duration-300 bg-card/80 backdrop-blur overflow-hidden flex flex-col sm:flex-row relative hover:neon-border border-primary/20">
+                  <div className="absolute top-0 right-0 p-2 z-10 flex gap-2">
+                    <div className="px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider border rounded shadow-sm bg-background/90 backdrop-blur text-primary border-primary/30">
+                      {t.status}
                     </div>
                   </div>
-                  
-                  <div className="h-32 bg-muted relative overflow-hidden">
-                    {t.bannerUrl ? (
-                      <img src={t.bannerUrl} alt={t.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-primary/20 to-card flex items-center justify-center">
-                        <Swords className="h-12 w-12 text-primary/40" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
+
+                  <div className="w-full sm:w-48 h-48 sm:h-auto bg-muted relative shrink-0">
+                    <img
+                      src={t.bannerUrl || getDefaultBanner(t.gameMode)}
+                      alt={t.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => { (e.target as HTMLImageElement).src = getDefaultBanner("squad"); }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-card hidden sm:block" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent sm:hidden" />
                   </div>
-                  
-                  <CardContent className="p-5 flex-1 flex flex-col pt-2 relative z-10">
-                    <h3 className="text-xl font-bold font-display uppercase tracking-wider mb-2 group-hover:text-primary transition-colors line-clamp-1">{t.title}</h3>
-                    
-                    <div className="text-xs text-muted-foreground font-mono mb-4 flex items-center gap-2">
-                      <Zap className="h-3 w-3 text-secondary" />
-                      {format(new Date(t.startDateTime), "MMM do, h:mm a")}
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4 mt-auto">
-                      <div className="bg-background/50 p-3 rounded border border-border/50">
-                        <p className="text-[10px] text-muted-foreground font-mono uppercase">Prize Pool</p>
-                        <p className="text-lg font-bold text-secondary flex items-center">
-                          <IndianRupee className="h-4 w-4" />{t.prizePool}
-                        </p>
+
+                  <CardContent className="p-5 flex-1 flex flex-col justify-between relative z-10">
+                    <div>
+                      <h3 className="text-xl font-bold font-display uppercase tracking-wider mb-2 group-hover:text-primary transition-colors line-clamp-2">{t.title}</h3>
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground font-mono mb-3">
+                        <span className="flex items-center gap-1"><Zap className="h-3 w-3 text-primary" /> {format(new Date(t.startDateTime), "MMM do, h:mm a")}</span>
+                        <span className="flex items-center gap-1"><Map className="h-3 w-3 text-secondary" /> {t.mapName}</span>
+                        <span className="flex items-center gap-1"><Users className="h-3 w-3 text-white" /> {t.gameMode.toUpperCase()}</span>
                       </div>
-                      <div className="bg-background/50 p-3 rounded border border-border/50">
-                        <p className="text-[10px] text-muted-foreground font-mono uppercase">Entry Fee</p>
-                        <p className="text-lg font-bold text-primary flex items-center">
-                          {t.entryFee > 0 ? <><IndianRupee className="h-4 w-4" />{t.entryFee}</> : "FREE"}
-                        </p>
+                      <div className="flex items-center gap-2 mb-3 bg-primary/5 border border-primary/20 rounded px-3 py-1.5 w-fit text-xs">
+                        <span className="text-muted-foreground font-mono uppercase tracking-wider">Starts in</span>
+                        <TournamentCountdown startDateTime={t.startDateTime} />
                       </div>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs font-mono uppercase text-muted-foreground">
-                        <span>Slots Filled</span>
-                        <span>{t.filledSlots}/{t.maxSlots}</span>
+
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground font-mono uppercase mb-1">Prize / Fee</p>
+                        <div className="flex items-center gap-2 font-mono">
+                          <span className="text-secondary font-bold flex items-center"><IndianRupee className="h-3 w-3" />{t.prizePool}</span>
+                          <span className="text-muted-foreground text-xs">/</span>
+                          <span className="text-primary font-bold flex items-center">{t.entryFee > 0 ? <><IndianRupee className="h-3 w-3" />{t.entryFee}</> : "FREE"}</span>
+                        </div>
                       </div>
-                      <div className="w-full bg-background h-2 rounded-full overflow-hidden border border-border/50">
-                        <div 
-                          className="bg-primary h-full shadow-[0_0_10px_rgba(0,245,255,0.8)]" 
-                          style={{ width: `${(t.filledSlots / t.maxSlots) * 100}%` }}
-                        />
+                      <div className="flex flex-col justify-end">
+                        <div className="flex justify-between text-[10px] font-mono uppercase text-muted-foreground mb-1">
+                          <span>Slots</span>
+                          <span>{t.filledSlots}/{t.maxSlots}</span>
+                        </div>
+                        <div className="w-full bg-background h-1.5 rounded-full overflow-hidden border border-border/50">
+                          <div
+                            className={`h-full ${t.filledSlots >= t.maxSlots ? 'bg-destructive shadow-[0_0_5px_rgba(255,0,0,0.8)]' : 'bg-primary shadow-[0_0_5px_rgba(0,245,255,0.8)]'}`}
+                            style={{ width: `${(t.filledSlots / t.maxSlots) * 100}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </CardContent>
