@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, User, ShieldAlert, LogOut, Swords, Menu, Wallet } from "lucide-react";
+import { Bell, User, ShieldAlert, LogOut, Swords, Menu, Wallet, HeadphonesIcon } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 
@@ -46,6 +46,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </Link>
         </>
       )}
+      <Link href="/support" onClick={onNavigate} className={`hover:text-primary transition-colors flex items-center gap-1 ${location === "/support" ? "text-primary neon-text" : "text-muted-foreground"}`}>
+        Support
+      </Link>
     </>
   );
 
@@ -212,6 +215,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <p className="text-center text-sm text-muted-foreground font-mono">
             Built for competitive mobile gamers. Step into the arena.
           </p>
+          <Link href="/support" className="flex items-center gap-1.5 text-sm font-mono text-muted-foreground hover:text-primary transition-colors">
+            <HeadphonesIcon className="h-4 w-4" />
+            Support
+          </Link>
         </div>
       </footer>
     </div>

@@ -15,6 +15,7 @@ import Admin from "@/pages/admin";
 import Notifications from "@/pages/notifications";
 import Wallet from "@/pages/wallet";
 import MyMatches from "@/pages/my-matches";
+import Support from "@/pages/support";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ function Router() {
         <Route path="/notifications" component={Notifications} />
         <Route path="/wallet" component={Wallet} />
         <Route path="/my-matches" component={MyMatches} />
+        <Route path="/support" component={Support} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
