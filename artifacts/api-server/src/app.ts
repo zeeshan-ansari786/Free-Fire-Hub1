@@ -6,7 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startTournamentScheduler } from "./lib/scheduler";
-import { seedAdminUser, ensureSessionTable } from "./lib/seed";
+import { seedAdminUser, ensureSessionTable, ensureMigrations } from "./lib/seed";
 import path from "path";
 import fs from "fs";
 
@@ -73,7 +73,9 @@ app.use("/api", router);
 
 startTournamentScheduler();
 
-ensureSessionTable().catch((err) => logger.error({ err }, "Session table setup failed"));
-seedAdminUser().catch((err) => logger.error({ err }, "Seed failed"));
+ensureSessionTable()
+  .then(() => ensureMigrations())
+  .then(() => seedAdminUser())
+  .catch((err) => logger.error({ err }, "Startup init failed"));
 
 export default app;

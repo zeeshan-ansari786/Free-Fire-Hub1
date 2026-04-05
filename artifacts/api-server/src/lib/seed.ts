@@ -1,4 +1,4 @@
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, emailOtpTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -25,6 +25,20 @@ export async function ensureSessionTable(): Promise<void> {
   }
 }
 
+export async function ensureMigrations(): Promise<void> {
+  try {
+    await db.execute(sql`
+      ALTER TABLE email_otp ADD COLUMN IF NOT EXISTS pending_data text
+    `);
+    await db.execute(sql`
+      DELETE FROM users WHERE is_verified = false
+    `);
+    logger.info("DB migrations applied: pending_data column, zombie users cleaned up");
+  } catch (err) {
+    logger.error({ err }, "Migration step failed (non-fatal)");
+  }
+}
+
 export async function seedAdminUser(): Promise<void> {
   try {
     const [existing] = await db
@@ -33,7 +47,6 @@ export async function seedAdminUser(): Promise<void> {
       .where(eq(usersTable.email, ADMIN_EMAIL));
 
     if (existing) {
-      // Ensure the existing admin is verified and has admin flag
       await db
         .update(usersTable)
         .set({ isAdmin: true, isVerified: true })

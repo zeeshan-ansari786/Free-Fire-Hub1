@@ -26,6 +26,7 @@ export const emailOtpTable = pgTable("email_otp", {
   otpHash: text("otp_hash").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   resendCount: integer("resend_count").notNull().default(0),
+  pendingData: text("pending_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
