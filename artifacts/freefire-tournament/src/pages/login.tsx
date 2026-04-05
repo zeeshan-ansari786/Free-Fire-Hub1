@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Swords } from "lucide-react";
+import { Swords, Eye, EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,6 +25,7 @@ export default function Login() {
   const { toast } = useToast();
   const { mutate: login, isPending } = useLogin();
   const { isAuthenticated } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) setLocation("/");
@@ -40,8 +41,13 @@ export default function Login() {
 
   const onSubmit = (values: z.infer<typeof loginSchema>) => {
     login({ data: values }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      onSuccess: (response) => {
+        const data = response as unknown as { user?: unknown; message?: string };
+        if (data?.user) {
+          queryClient.setQueryData(getGetMeQueryKey(), data.user);
+        } else {
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        }
         setLocation("/");
       },
       onError: (err) => {
@@ -118,12 +124,22 @@ export default function Login() {
                   <FormItem>
                     <FormLabel className="font-mono text-primary">PASSWORD</FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="••••••••"
-                        {...field}
-                        className="bg-background/50 border-primary/30 focus-visible:ring-primary font-mono"
-                      />
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="••••••••"
+                          {...field}
+                          className="bg-background/50 border-primary/30 focus-visible:ring-primary font-mono pr-10"
+                        />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => setShowPassword(v => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>

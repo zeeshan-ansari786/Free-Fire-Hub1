@@ -82,13 +82,17 @@ export default function VerifyOtp() {
     }
     setIsVerifying(true);
     try {
-      const data = await customFetch<{ message: string }>("/api/auth/verify-otp", {
+      const data = await customFetch<{ user?: unknown; message: string }>("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp: otpValue }),
       });
       sessionStorage.removeItem("pendingVerificationEmail");
-      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      if (data?.user) {
+        queryClient.setQueryData(getGetMeQueryKey(), data.user);
+      } else {
+        await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      }
       toast({ title: "Email verified!", description: data.message });
       setLocation("/");
     } catch (err: unknown) {
