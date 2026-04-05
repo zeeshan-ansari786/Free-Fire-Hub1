@@ -45,9 +45,21 @@ export default function Login() {
         setLocation("/");
       },
       onError: (err) => {
-        const apiErr = err as ApiError<ErrorResponse>;
+        const apiErr = err as ApiError<ErrorResponse & { requiresVerification?: boolean; email?: string }>;
+        const payload = apiErr.data as (ErrorResponse & { requiresVerification?: boolean; email?: string }) | null;
+
+        if (payload?.requiresVerification && payload?.email) {
+          sessionStorage.setItem("pendingVerificationEmail", payload.email);
+          toast({
+            title: "Email not verified",
+            description: "A new OTP has been sent to your email. Please verify to login.",
+          });
+          setLocation("/verify-otp");
+          return;
+        }
+
         const message =
-          apiErr.data?.error ||
+          payload?.error ||
           (apiErr.status === 401 ? "Invalid email or password" :
            apiErr.status === 403 ? "Your account has been banned. Contact support." :
            apiErr.status >= 500 ? "Server error. Please try again later." :

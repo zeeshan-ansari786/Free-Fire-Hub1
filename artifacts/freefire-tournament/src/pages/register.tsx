@@ -49,13 +49,17 @@ export default function Register() {
 
   const onSubmit = (values: z.infer<typeof registerSchema>) => {
     register({ data: values }, {
-      onSuccess: () => {
-        toast({
-          title: "Account created successfully!",
-          description: "Welcome to the arena. Let the games begin.",
-        });
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-        setLocation("/");
+      onSuccess: (data) => {
+        const resp = data as unknown as { requiresVerification?: boolean; message?: string };
+        if (resp?.requiresVerification) {
+          sessionStorage.setItem("pendingVerificationEmail", values.email);
+          toast({ title: "OTP sent!", description: "Check your email for the 6-digit verification code." });
+          setLocation("/verify-otp");
+        } else {
+          toast({ title: "Account created!", description: "Welcome to the arena." });
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          setLocation("/");
+        }
       },
       onError: (err) => {
         const apiErr = err as ApiError<ErrorResponse>;

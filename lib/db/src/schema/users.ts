@@ -12,10 +12,20 @@ export const usersTable = pgTable("users", {
   whatsappNumber: text("whatsapp_number").notNull(),
   isAdmin: boolean("is_admin").notNull().default(false),
   isBanned: boolean("is_banned").notNull().default(false),
+  isVerified: boolean("is_verified").notNull().default(false),
   walletBalance: integer("wallet_balance").notNull().default(0),
   totalEarnings: integer("total_earnings").notNull().default(0),
   globalRank: integer("global_rank").notNull().default(0),
   matchesPlayed: integer("matches_played").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const emailOtpTable = pgTable("email_otp", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  otpHash: text("otp_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  resendCount: integer("resend_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

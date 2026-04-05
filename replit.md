@@ -16,7 +16,8 @@ pnpm workspace monorepo using TypeScript. Free Fire Tournament platform (FF Aren
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 - **Frontend**: React + Vite + Tailwind CSS (dark cyberpunk theme)
-- **Auth**: Session-based (express-session + Node crypto)
+- **Auth**: Session-based (express-session + Node crypto) + email OTP verification (Nodemailer)
+- **Email**: Nodemailer via SMTP (env: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)
 
 ## Structure
 

@@ -16,6 +16,7 @@ import Notifications from "@/pages/notifications";
 import Wallet from "@/pages/wallet";
 import MyMatches from "@/pages/my-matches";
 import Support from "@/pages/support";
+import VerifyOtp from "@/pages/verify-otp";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ function Router() {
         <Route path="/wallet" component={Wallet} />
         <Route path="/my-matches" component={MyMatches} />
         <Route path="/support" component={Support} />
+        <Route path="/verify-otp" component={VerifyOtp} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
