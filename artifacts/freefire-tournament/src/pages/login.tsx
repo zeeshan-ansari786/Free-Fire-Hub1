@@ -40,10 +40,13 @@ export default function Login() {
     login({ data: values }, {
       onSuccess: (response) => {
         const data = response as unknown as { user?: unknown };
-        queryClient.clear();
         if (data?.user) {
           queryClient.setQueryData(getGetMeQueryKey(), data.user);
         }
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            JSON.stringify(query.queryKey) !== JSON.stringify(getGetMeQueryKey()),
+        });
         setLocation("/");
       },
       onError: (err) => {

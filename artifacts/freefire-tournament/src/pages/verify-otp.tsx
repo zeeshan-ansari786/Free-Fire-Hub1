@@ -88,10 +88,13 @@ export default function VerifyOtp() {
         body: JSON.stringify({ email, otp: otpValue }),
       });
       sessionStorage.removeItem("pendingVerificationEmail");
-      queryClient.clear();
       if (data?.user) {
         queryClient.setQueryData(getGetMeQueryKey(), data.user);
       }
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          JSON.stringify(query.queryKey) !== JSON.stringify(getGetMeQueryKey()),
+      });
       toast({ title: "Email verified!", description: data.message });
       setLocation("/");
     } catch (err: unknown) {
