@@ -11,7 +11,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({ user: null, isLoading: true, isAuthenticated: false });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 30_000 } });
+  const { data: user, isLoading } = useGetMe({
+    query: {
+      retry: false,
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
+      refetchOnWindowFocus: true,
+      refetchInterval: 5 * 60 * 1000,
+      refetchOnReconnect: true,
+    },
+  });
 
   return (
     <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user }}>

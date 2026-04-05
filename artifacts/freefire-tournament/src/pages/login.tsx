@@ -24,29 +24,25 @@ export default function Login() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { mutate: login, isPending } = useLogin();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) setLocation("/");
-  }, [isAuthenticated, setLocation]);
+    if (!isLoading && isAuthenticated) setLocation("/");
+  }, [isAuthenticated, isLoading, setLocation]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = (values: z.infer<typeof loginSchema>) => {
     login({ data: values }, {
       onSuccess: (response) => {
-        const data = response as unknown as { user?: unknown; message?: string };
+        const data = response as unknown as { user?: unknown };
+        queryClient.clear();
         if (data?.user) {
           queryClient.setQueryData(getGetMeQueryKey(), data.user);
-        } else {
-          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         }
         setLocation("/");
       },
@@ -70,16 +66,12 @@ export default function Login() {
            apiErr.status === 403 ? "Your account has been banned. Contact support." :
            apiErr.status >= 500 ? "Server error. Please try again later." :
            "Login failed. Please check your details.");
-        toast({
-          title: "Login failed",
-          description: message,
-          variant: "destructive",
-        });
+        toast({ title: "Login failed", description: message, variant: "destructive" });
       },
     });
   };
 
-  if (isAuthenticated) return null;
+  if (isLoading || isAuthenticated) return null;
 
   return (
     <div className="flex items-center justify-center min-h-[70vh]">

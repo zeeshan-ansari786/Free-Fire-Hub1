@@ -28,12 +28,12 @@ export default function Register() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { mutate: register, isPending } = useRegister();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) setLocation("/");
-  }, [isAuthenticated, setLocation]);
+    if (!isLoading && isAuthenticated) setLocation("/");
+  }, [isAuthenticated, isLoading, setLocation]);
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
@@ -78,7 +78,7 @@ export default function Register() {
     });
   };
 
-  if (isAuthenticated) return null;
+  if (isLoading || isAuthenticated) return null;
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">

@@ -1,10 +1,29 @@
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
 const ADMIN_EMAIL = "admin@ffarena.com";
 const ADMIN_PASSWORD = "admin123";
+
+export async function ensureSessionTable(): Promise<void> {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+      ) WITH (OIDS=FALSE)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")
+    `);
+    logger.info("Session table ready");
+  } catch (err) {
+    logger.error({ err }, "Failed to ensure session table");
+  }
+}
 
 export async function seedAdminUser(): Promise<void> {
   try {

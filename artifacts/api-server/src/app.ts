@@ -6,7 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startTournamentScheduler } from "./lib/scheduler";
-import { seedAdminUser } from "./lib/seed";
+import { seedAdminUser, ensureSessionTable } from "./lib/seed";
 import path from "path";
 import fs from "fs";
 
@@ -44,7 +44,7 @@ const sessionStore =
     ? new PgSession({
         conString: process.env.DATABASE_URL,
         tableName: "session",
-        createTableIfMissing: true,
+        createTableIfMissing: false,
       })
     : undefined;
 
@@ -73,6 +73,7 @@ app.use("/api", router);
 
 startTournamentScheduler();
 
+ensureSessionTable().catch((err) => logger.error({ err }, "Session table setup failed"));
 seedAdminUser().catch((err) => logger.error({ err }, "Seed failed"));
 
 export default app;
