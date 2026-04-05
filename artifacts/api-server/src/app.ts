@@ -2,13 +2,17 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startTournamentScheduler } from "./lib/scheduler";
+import { seedAdminUser } from "./lib/seed";
 import path from "path";
 import fs from "fs";
 
 const app: Express = express();
+
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -32,8 +36,21 @@ app.use(
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+const PgSession = connectPgSimple(session);
+
+const sessionStore =
+  process.env.DATABASE_URL
+    ? new PgSession({
+        conString: process.env.DATABASE_URL,
+        tableName: "session",
+        createTableIfMissing: true,
+      })
+    : undefined;
+
 app.use(
   session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET ?? "ff-arena-secret-change-in-prod",
     resave: false,
     saveUninitialized: false,
@@ -55,5 +72,7 @@ app.use("/api/uploads", express.static(uploadsDir));
 app.use("/api", router);
 
 startTournamentScheduler();
+
+seedAdminUser().catch((err) => logger.error({ err }, "Seed failed"));
 
 export default app;
