@@ -1,3 +1,67 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0D1A1A"/>
+      <stop offset="100%" stop-color="#080D0D"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowStrong" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="swordGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5FF"/>
+      <stop offset="100%" stop-color="#39FF14"/>
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5FF" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#39FF14" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="180" height="180" rx="36" fill="url(#bgGrad)"/>
+
+  <!-- Subtle border with gradient -->
+  <rect x="2" y="2" width="176" height="176" rx="34" fill="none" stroke="url(#borderGrad)" stroke-width="2" opacity="0.7"/>
+
+  <!-- Inner glow ring -->
+  <rect x="8" y="8" width="164" height="164" rx="30" fill="none" stroke="#00F5FF" stroke-width="1" opacity="0.15"/>
+
+  <!-- Crosshair outer ring -->
+  <circle cx="90" cy="90" r="48" stroke="#00F5FF" stroke-width="2.5" fill="none" filter="url(#glow)" opacity="0.9"/>
+
+  <!-- Crosshair inner ring -->
+  <circle cx="90" cy="90" r="28" stroke="#39FF14" stroke-width="1.5" fill="none" filter="url(#glow)" opacity="0.8"/>
+
+  <!-- Center dot -->
+  <circle cx="90" cy="90" r="6" fill="#00F5FF" filter="url(#glowStrong)" opacity="0.95"/>
+
+  <!-- Crosshair lines - Top -->
+  <line x1="90" y1="32" x2="90" y2="55" stroke="#00F5FF" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Gap for inner ring top -->
+  <!-- Bottom -->
+  <line x1="90" y1="125" x2="90" y2="148" stroke="#00F5FF" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Left -->
+  <line x1="32" y1="90" x2="55" y2="90" stroke="#00F5FF" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Right -->
+  <line x1="125" y1="90" x2="148" y2="90" stroke="#00F5FF" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Diagonal accent ticks (45°) -->
+  <line x1="46" y1="46" x2="55" y2="55" stroke="#39FF14" stroke-width="2" stroke-linecap="round" filter="url(#glow)" opacity="0.7"/>
+  <line x1="125" y1="55" x2="134" y2="46" stroke="#39FF14" stroke-width="2" stroke-linecap="round" filter="url(#glow)" opacity="0.7"/>
+  <line x1="46" y1="134" x2="55" y2="125" stroke="#39FF14" stroke-width="2" stroke-linecap="round" filter="url(#glow)" opacity="0.7"/>
+  <line x1="125" y1="125" x2="134" y2="134" stroke="#39FF14" stroke-width="2" stroke-linecap="round" filter="url(#glow)" opacity="0.7"/>
+
+  <!-- "FF" monogram letters below crosshair — subtle -->
+  <text x="90" y="166" font-family="monospace" font-size="14" font-weight="bold" fill="#00F5FF" text-anchor="middle" opacity="0.5" letter-spacing="4">FF</text>
 </svg>
