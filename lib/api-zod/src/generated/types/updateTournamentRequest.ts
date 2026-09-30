@@ -13,6 +13,7 @@ export interface UpdateTournamentRequest {
   description?: string;
   prizePool?: number;
   entryFee?: number;
+  perKillPrize?: number;
   startDateTime?: Date;
   maxSlots?: number;
   status?: UpdateTournamentRequestStatus;

@@ -14,6 +14,8 @@ export interface CreateTournamentRequest {
   prizePool: number;
   /** @minimum 0 */
   entryFee: number;
+  /** @minimum 0 */
+  perKillPrize?: number;
   startDateTime: Date;
   /** @minimum 2 */
   maxSlots: number;

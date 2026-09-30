@@ -274,7 +274,7 @@ export default function Admin() {
   const { mutate: postRoom, isPending: isPostingRoom } = usePostRoomDetails();
   const { mutate: createTournament, isPending: isCreating } = useCreateTournamentDirect();
   const { mutate: banUser } = useBanUser();
-  const { mutate: approveWithdrawal } = useApproveWithdrawal();
+  const { mutate: approveWithdrawal, isPending: isApproving } = useApproveWithdrawal();
   const { mutate: kickPlayer, isPending: isKicking } = useKickPlayer();
   const { mutate: adjustWallet, isPending: isAdjustingWallet } = useAdjustWallet();
   const { mutate: updateConfig, isPending: isUpdatingConfig } = useUpdateAdminConfig();
@@ -749,8 +749,8 @@ export default function Admin() {
                           <TableCell className="text-right font-bold text-blue-400">₹{d.amount}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{format(new Date(d.createdAt), "MMM d, h:mm a")}</TableCell>
                           <TableCell className="text-right"><div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" className="h-8 px-2 border-secondary/50 text-secondary hover:bg-secondary/20 text-xs" onClick={() => handleWithdrawal(d.id, "approve")}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
-                            <Button size="sm" variant="outline" className="h-8 px-2 border-destructive/50 text-destructive hover:bg-destructive/20 text-xs" onClick={() => handleWithdrawal(d.id, "reject")}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
+                            <Button size="sm" variant="outline" disabled={isApproving} className="h-8 px-2 border-secondary/50 text-secondary hover:bg-secondary/20 text-xs" onClick={() => handleWithdrawal(d.id, "approve")}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
+                            <Button size="sm" variant="outline" disabled={isApproving} className="h-8 px-2 border-destructive/50 text-destructive hover:bg-destructive/20 text-xs" onClick={() => handleWithdrawal(d.id, "reject")}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
                           </div></TableCell>
                         </TableRow>
                       ))}
@@ -779,8 +779,8 @@ export default function Admin() {
                           <TableCell className="text-right font-bold text-yellow-500">₹{w.amount}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{format(new Date(w.createdAt), "MMM d, h:mm a")}</TableCell>
                           <TableCell className="text-right"><div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" className="h-8 px-2 border-secondary/50 text-secondary hover:bg-secondary/20 text-xs" onClick={() => handleWithdrawal(w.id, "approve")}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
-                            <Button size="sm" variant="outline" className="h-8 px-2 border-destructive/50 text-destructive hover:bg-destructive/20 text-xs" onClick={() => handleWithdrawal(w.id, "reject")}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
+                            <Button size="sm" variant="outline" disabled={isApproving} className="h-8 px-2 border-secondary/50 text-secondary hover:bg-secondary/20 text-xs" onClick={() => handleWithdrawal(w.id, "approve")}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
+                            <Button size="sm" variant="outline" disabled={isApproving} className="h-8 px-2 border-destructive/50 text-destructive hover:bg-destructive/20 text-xs" onClick={() => handleWithdrawal(w.id, "reject")}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
                           </div></TableCell>
                         </TableRow>
                       ))}

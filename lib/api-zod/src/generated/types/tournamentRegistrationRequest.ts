@@ -5,8 +5,10 @@
  * Free Fire Tournament Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { TournamentRegistrationRequestTeamMembersItem } from "./tournamentRegistrationRequestTeamMembersItem";
 
 export interface TournamentRegistrationRequest {
   paymentScreenshotUrl?: string | null;
   transactionId?: string | null;
+  teamMembers?: TournamentRegistrationRequestTeamMembersItem[];
 }

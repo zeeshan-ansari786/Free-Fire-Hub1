@@ -103,6 +103,7 @@ export const GetTournamentsResponse = zod.object({
       description: zod.string().optional(),
       prizePool: zod.number(),
       entryFee: zod.number(),
+      perKillPrize: zod.number(),
       startDateTime: zod.coerce.date(),
       maxSlots: zod.number(),
       filledSlots: zod.number(),
@@ -127,6 +128,8 @@ export const createTournamentBodyPrizePoolMin = 0;
 
 export const createTournamentBodyEntryFeeMin = 0;
 
+export const createTournamentBodyPerKillPrizeMin = 0;
+
 export const createTournamentBodyMaxSlotsMin = 2;
 
 export const CreateTournamentBody = zod.object({
@@ -134,6 +137,10 @@ export const CreateTournamentBody = zod.object({
   description: zod.string().optional(),
   prizePool: zod.number().min(createTournamentBodyPrizePoolMin),
   entryFee: zod.number().min(createTournamentBodyEntryFeeMin),
+  perKillPrize: zod
+    .number()
+    .min(createTournamentBodyPerKillPrizeMin)
+    .optional(),
   startDateTime: zod.coerce.date(),
   maxSlots: zod.number().min(createTournamentBodyMaxSlotsMin),
   mapName: zod.string(),
@@ -155,6 +162,7 @@ export const GetTournamentResponse = zod
     description: zod.string().optional(),
     prizePool: zod.number(),
     entryFee: zod.number(),
+    perKillPrize: zod.number(),
     startDateTime: zod.coerce.date(),
     maxSlots: zod.number(),
     filledSlots: zod.number(),
@@ -185,6 +193,7 @@ export const UpdateTournamentBody = zod.object({
   description: zod.string().optional(),
   prizePool: zod.number().optional(),
   entryFee: zod.number().optional(),
+  perKillPrize: zod.number().optional(),
   startDateTime: zod.coerce.date().optional(),
   maxSlots: zod.number().optional(),
   status: zod.enum(["upcoming", "ongoing", "completed"]).optional(),
@@ -199,6 +208,7 @@ export const UpdateTournamentResponse = zod.object({
   description: zod.string().optional(),
   prizePool: zod.number(),
   entryFee: zod.number(),
+  perKillPrize: zod.number(),
   startDateTime: zod.coerce.date(),
   maxSlots: zod.number(),
   filledSlots: zod.number(),
@@ -221,6 +231,7 @@ export const PostRoomDetailsParams = zod.object({
 export const PostRoomDetailsBody = zod.object({
   roomId: zod.string(),
   roomPassword: zod.string(),
+  perKillPrize: zod.number().optional(),
 });
 
 export const PostRoomDetailsResponse = zod.object({
@@ -229,6 +240,7 @@ export const PostRoomDetailsResponse = zod.object({
   description: zod.string().optional(),
   prizePool: zod.number(),
   entryFee: zod.number(),
+  perKillPrize: zod.number(),
   startDateTime: zod.coerce.date(),
   maxSlots: zod.number(),
   filledSlots: zod.number(),
@@ -251,6 +263,15 @@ export const RegisterForTournamentParams = zod.object({
 export const RegisterForTournamentBody = zod.object({
   paymentScreenshotUrl: zod.string().nullish(),
   transactionId: zod.string().nullish(),
+  teamMembers: zod
+    .array(
+      zod.object({
+        uid: zod.string(),
+        name: zod.string(),
+        self: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -287,6 +308,7 @@ export const GetTournamentRegistrationsResponseItem = zod.object({
     description: zod.string().optional(),
     prizePool: zod.number(),
     entryFee: zod.number(),
+    perKillPrize: zod.number(),
     startDateTime: zod.coerce.date(),
     maxSlots: zod.number(),
     filledSlots: zod.number(),
@@ -342,6 +364,7 @@ export const VerifyRegistrationResponse = zod.object({
     description: zod.string().optional(),
     prizePool: zod.number(),
     entryFee: zod.number(),
+    perKillPrize: zod.number(),
     startDateTime: zod.coerce.date(),
     maxSlots: zod.number(),
     filledSlots: zod.number(),
@@ -644,6 +667,7 @@ export const GetAdminStatsResponse = zod.object({
       description: zod.string().optional(),
       prizePool: zod.number(),
       entryFee: zod.number(),
+      perKillPrize: zod.number(),
       startDateTime: zod.coerce.date(),
       maxSlots: zod.number(),
       filledSlots: zod.number(),
@@ -688,6 +712,7 @@ export const GetPendingRegistrationsResponseItem = zod.object({
     description: zod.string().optional(),
     prizePool: zod.number(),
     entryFee: zod.number(),
+    perKillPrize: zod.number(),
     startDateTime: zod.coerce.date(),
     maxSlots: zod.number(),
     filledSlots: zod.number(),

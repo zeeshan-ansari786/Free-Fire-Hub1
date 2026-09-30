@@ -66,7 +66,8 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
 
 // Ban / unban user
 router.post("/admin/users/:id/ban", requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
@@ -81,7 +82,8 @@ router.post("/admin/users/:id/ban", requireAdmin, async (req, res): Promise<void
 
 // Permanently delete a user and all their data
 router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
@@ -139,12 +141,21 @@ router.get("/admin/financial", requireAdmin, async (req, res): Promise<void> => 
 
 // Approve or reject a deposit or withdrawal
 router.post("/admin/financial/:id/approve", requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
   const { action } = req.body; // "approve" | "reject"
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const [txn] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, id));
   if (!txn) { res.status(404).json({ error: "Transaction not found" }); return; }
+
+  // Idempotency guard: a transaction must be processed exactly once.
+  // Without this, double-clicking "Approve" credits a deposit twice (or
+  // refunds a rejected withdrawal twice).
+  if (txn.status !== "pending") {
+    res.status(400).json({ error: `Transaction already ${txn.status}. It cannot be processed again.` });
+    return;
+  }
 
   if (action === "approve") {
     await db.update(transactionsTable).set({ status: "completed" }).where(eq(transactionsTable.id, id));
@@ -173,7 +184,8 @@ router.post("/admin/financial/:id/approve", requireAdmin, async (req, res): Prom
 
 // Adjust wallet balance for a user
 router.post("/admin/users/:id/wallet", requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
   const { amount, type, reason } = req.body;
@@ -205,7 +217,8 @@ router.post("/admin/users/:id/wallet", requireAdmin, async (req, res): Promise<v
 
 // Get registrations for a tournament (room management)
 router.get("/admin/tournaments/:id/players", requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid tournament ID" }); return; }
 
   const regs = await db.select().from(registrationsTable).where(eq(registrationsTable.tournamentId, id));

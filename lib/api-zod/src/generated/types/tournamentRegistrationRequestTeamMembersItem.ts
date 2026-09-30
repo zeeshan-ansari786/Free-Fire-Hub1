@@ -6,8 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RoomDetailsRequest {
-  roomId: string;
-  roomPassword: string;
-  perKillPrize?: number;
-}
+export type TournamentRegistrationRequestTeamMembersItem = {
+  uid: string;
+  name: string;
+  self?: boolean;
+};

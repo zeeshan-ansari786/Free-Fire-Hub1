@@ -197,7 +197,8 @@ router.get("/admin/leaderboard", requireAdmin, async (req, res): Promise<void> =
 });
 
 router.put("/admin/leaderboard/:userId", requireAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(req.params.userId, 10);
+  const rawUserId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+  const userId = parseInt(rawUserId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
 
   const { matchesPlayed, totalEarnings, globalRank } = req.body as {
@@ -224,7 +225,8 @@ router.put("/admin/leaderboard/:userId", requireAdmin, async (req, res): Promise
 });
 
 router.delete("/admin/leaderboard/:userId", requireAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(req.params.userId, 10);
+  const rawUserId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+  const userId = parseInt(rawUserId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
 
   await db.delete(leaderboardTable).where(eq(leaderboardTable.userId, userId));

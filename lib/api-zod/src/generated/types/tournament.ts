@@ -14,6 +14,7 @@ export interface Tournament {
   description?: string;
   prizePool: number;
   entryFee: number;
+  perKillPrize: number;
   startDateTime: Date;
   maxSlots: number;
   filledSlots: number;

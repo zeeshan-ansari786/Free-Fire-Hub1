@@ -80,6 +80,7 @@ export interface Tournament {
   description?: string;
   prizePool: number;
   entryFee: number;
+  perKillPrize: number;
   startDateTime: string;
   maxSlots: number;
   filledSlots: number;
@@ -120,6 +121,8 @@ export interface CreateTournamentRequest {
   prizePool: number;
   /** @minimum 0 */
   entryFee: number;
+  /** @minimum 0 */
+  perKillPrize?: number;
   startDateTime: string;
   /** @minimum 2 */
   maxSlots: number;
@@ -151,6 +154,7 @@ export interface UpdateTournamentRequest {
   description?: string;
   prizePool?: number;
   entryFee?: number;
+  perKillPrize?: number;
   startDateTime?: string;
   maxSlots?: number;
   status?: UpdateTournamentRequestStatus;
@@ -162,11 +166,19 @@ export interface UpdateTournamentRequest {
 export interface RoomDetailsRequest {
   roomId: string;
   roomPassword: string;
+  perKillPrize?: number;
 }
+
+export type TournamentRegistrationRequestTeamMembersItem = {
+  uid: string;
+  name: string;
+  self?: boolean;
+};
 
 export interface TournamentRegistrationRequest {
   paymentScreenshotUrl?: string | null;
   transactionId?: string | null;
+  teamMembers?: TournamentRegistrationRequestTeamMembersItem[];
 }
 
 export type RegistrationPaymentStatus =

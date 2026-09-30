@@ -637,6 +637,8 @@ components:
           type: integer
         entryFee:
           type: integer
+        perKillPrize:
+          type: integer
         startDateTime:
           type: string
           format: date-time
@@ -664,7 +666,7 @@ components:
         createdAt:
           type: string
           format: date-time
-      required: [id, title, prizePool, entryFee, startDateTime, maxSlots, filledSlots, status, mapName, gameMode, createdAt]
+      required: [id, title, prizePool, entryFee, perKillPrize, startDateTime, maxSlots, filledSlots, status, mapName, gameMode, createdAt]
 
     TournamentDetail:
       allOf:
@@ -706,6 +708,9 @@ components:
         entryFee:
           type: integer
           minimum: 0
+        perKillPrize:
+          type: integer
+          minimum: 0
         startDateTime:
           type: string
           format: date-time
@@ -732,6 +737,8 @@ components:
           type: integer
         entryFee:
           type: integer
+        perKillPrize:
+          type: integer
         startDateTime:
           type: string
           format: date-time
@@ -755,6 +762,8 @@ components:
           type: string
         roomPassword:
           type: string
+        perKillPrize:
+          type: integer
       required: [roomId, roomPassword]
 
     TournamentRegistrationRequest:
@@ -766,6 +775,18 @@ components:
         transactionId:
           type: string
           nullable: true
+        teamMembers:
+          type: array
+          items:
+            type: object
+            properties:
+              uid:
+                type: string
+              name:
+                type: string
+              self:
+                type: boolean
+            required: [uid, name]
       required: []
 
     Registration:

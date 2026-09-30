@@ -102,7 +102,14 @@ router.get("/tournaments/:id", async (req, res): Promise<void> => {
     isAdmin = user?.isAdmin ?? false;
   }
 
-  if (!canSeeRoom && !isAdmin) {
+  // Room details are only visible inside the room window: from 15 minutes
+  // before start until 30 minutes after start (covers the live match).
+  // Outside that window the room ID/password are hidden, per the product rule
+  // "Room ID/Password visible to verified players 15 minutes before match start".
+  const minutesUntilStart = (new Date(tournament.startDateTime).getTime() - Date.now()) / 60000;
+  const inRoomWindow = minutesUntilStart <= 15 && minutesUntilStart >= -30;
+
+  if ((!canSeeRoom || !inRoomWindow) && !isAdmin) {
     tournamentData = { ...tournamentData, roomId: null, roomPassword: null };
   }
 
@@ -210,8 +217,10 @@ router.post("/tournaments/:id/room", requireAdmin, async (req, res): Promise<voi
 
 // Admin: kick/disqualify a player from a tournament
 router.post("/tournaments/:id/players/:regId/kick", requireAdmin, async (req, res): Promise<void> => {
-  const tournamentId = parseInt(req.params.id, 10);
-  const regId = parseInt(req.params.regId, 10);
+  const rawTid = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const tournamentId = parseInt(rawTid, 10);
+  const rawRegId = Array.isArray(req.params.regId) ? req.params.regId[0] : req.params.regId;
+  const regId = parseInt(rawRegId, 10);
 
   if (isNaN(tournamentId) || isNaN(regId)) {
     res.status(400).json({ error: "Invalid IDs" });
@@ -253,7 +262,8 @@ router.post("/tournaments/:id/players/:regId/kick", requireAdmin, async (req, re
 
 // Admin: get all players in a tournament
 router.get("/tournaments/:id/players", requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const regs = await db.select().from(registrationsTable).where(eq(registrationsTable.tournamentId, id));

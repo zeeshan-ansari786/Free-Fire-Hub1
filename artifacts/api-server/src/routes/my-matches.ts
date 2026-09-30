@@ -27,7 +27,16 @@ router.get("/my-matches", requireAuth, async (req, res): Promise<void> => {
     const now = new Date();
     const startTime = tournament ? new Date(tournament.startDateTime) : null;
     const minutesUntilStart = startTime ? (startTime.getTime() - now.getTime()) / 60000 : null;
-    const showRoom = (reg.paymentStatus === "verified" || reg.paymentStatus === "free") && minutesUntilStart !== null && minutesUntilStart <= 15;
+    // Room is visible only in a window: from 15 min before start until 30 min
+    // after start (covers the live match). Never for completed tournaments.
+    // (Without the lower bound, `minutesUntilStart <= 15` stays true forever
+    // after the match, leaking the room ID/password indefinitely.)
+    const inRoomWindow =
+      minutesUntilStart !== null && minutesUntilStart <= 15 && minutesUntilStart >= -30;
+    const showRoom =
+      tournament?.status !== "completed" &&
+      (reg.paymentStatus === "verified" || reg.paymentStatus === "free") &&
+      inRoomWindow;
 
     return {
       ...reg,

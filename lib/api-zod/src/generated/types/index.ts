@@ -39,6 +39,7 @@ export * from "./tournamentDetail";
 export * from "./tournamentGameMode";
 export * from "./tournamentListResponse";
 export * from "./tournamentRegistrationRequest";
+export * from "./tournamentRegistrationRequestTeamMembersItem";
 export * from "./tournamentStatus";
 export * from "./updateLeaderboardRequest";
 export * from "./updateLeaderboardRequestEntriesItem";
